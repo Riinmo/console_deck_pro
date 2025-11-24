@@ -93,6 +93,12 @@ bool moduleConnected = false;
 unsigned long disconnectTimer = 0;
 bool matrixActive = false;
 
+// Variabili per Serial Data
+int mainBtnStates[9] = {0};
+int extBtnStates[6] = {0};
+int serVal1 = 0;
+int serVal2 = 0;
+
 void loadSettings()
 {
   if (EEPROM.read(EEPROM_ADDR_MAGIC) == MAGIC_NUMBER)
@@ -343,6 +349,7 @@ void readExtModule()
   {
     int raw1 = readSmooth(EXT_A0);
     int raw2 = readSmooth(EXT_A1);
+
     if (raw1 > 1018 && raw2 > 1018)
     {
       if (disconnectTimer == 0)
@@ -361,8 +368,14 @@ void readExtModule()
     }
     if (!moduleConnected)
       return;
+
     int p1 = rawToPercent(raw1);
     int p2 = rawToPercent(raw2);
+
+    // Update Serial Vars
+    serVal1 = p1;
+    serVal2 = p2;
+
     static int lp1 = -1, lp2 = -1;
     if (p1 != lp1 || p2 != lp2 || extAction[0] == '\0')
     {
@@ -375,23 +388,42 @@ void readExtModule()
   {
     moduleConnected = true;
     extAction[0] = '\0';
+
+    // Reset Serial Buttons Array
+    for (int i = 0; i < 6; i++)
+      extBtnStates[i] = 0;
+
     digitalWrite(EXT_A2, LOW);
     if (!digitalRead(EXT_A0))
+    {
       strcpy(extAction, "Ext Btn 1");
+      extBtnStates[0] = 1;
+    }
     if (!digitalRead(EXT_A1))
+    {
       strcpy(extAction, "Ext Btn 2");
+      extBtnStates[1] = 1;
+    }
     digitalWrite(EXT_A2, HIGH);
+
     digitalWrite(EXT_A3, LOW);
     if (!digitalRead(EXT_A0))
+    {
       strcpy(extAction, "Ext Btn 3");
+      extBtnStates[2] = 1;
+    }
     if (!digitalRead(EXT_A1))
+    {
       strcpy(extAction, "Ext Btn 4");
+      extBtnStates[3] = 1;
+    }
     digitalWrite(EXT_A3, HIGH);
   }
 }
 
 void setup()
 {
+  Serial.begin(9600); // SERIAL INIT
   u8g2.begin();
   u8g2.setFontMode(1);
   pinMode(PIN_LED, OUTPUT);
@@ -543,6 +575,10 @@ void loop()
   matrixActive = false;
   if (currentState == STATE_DEFAULT)
   {
+    // Reset array main buttons
+    for (int i = 0; i < 9; i++)
+      mainBtnStates[i] = 0;
+
     char prevExt[24];
     strcpy(prevExt, extAction);
     bool prevConn = moduleConnected;
@@ -557,7 +593,10 @@ void loop()
       {
         if (digitalRead(cols[c]) == LOW)
         {
-          sprintf(mainAction, "BTN %d", (c * 3) + r + 1);
+          int btnId = (c * 3) + r;
+          mainBtnStates[btnId] = 1; // Save for Serial
+
+          sprintf(mainAction, "BTN %d", btnId + 1);
           lastActionTime = now;
           matrixActive = true;
           update = true;
@@ -565,6 +604,7 @@ void loop()
       }
       digitalWrite(rows[r], HIGH);
     }
+
     if (!matrixActive && strcmp(mainAction, "Ready") != 0)
     {
       if (now - lastActionTime > 500)
@@ -573,6 +613,46 @@ void loop()
         update = true;
       }
     }
+
+    // --- SERIAL OUTPUT ---
+    // 1. Main 9 Buttons
+    for (int i = 0; i < 9; i++)
+    {
+      Serial.print(mainBtnStates[i]);
+      Serial.print(";");
+    }
+    // 2. Enc Click (Inverted logic: LOW=Pressed=1)
+    Serial.print(!digitalRead(PIN_ENC_SW));
+    Serial.print(";");
+    // 3. Enc Value
+    Serial.print(encoderValue);
+    Serial.print(";");
+    // 4. Module ID
+    Serial.print((int)currentModule);
+
+    // 5. Module Data (if any)
+    if (currentModule != MOD_NONE)
+    {
+      Serial.print(";");
+      if (currentModule == MOD_EXT_BTNS)
+      {
+        // 6 Buttons States (4 real + 2 dummies)
+        for (int i = 0; i < 6; i++)
+        {
+          Serial.print(extBtnStates[i]);
+          if (i < 5)
+            Serial.print(";");
+        }
+      }
+      else
+      {
+        // Sliders/Knobs Values
+        Serial.print(serVal1);
+        Serial.print(";");
+        Serial.print(serVal2);
+      }
+    }
+    Serial.println();
   }
 
   if (backlightEnabled)
