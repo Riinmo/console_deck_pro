@@ -1,14 +1,16 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include <Wire.h>
+#include <EEPROM.h>
 #include "dashboard_graphics.h"
 
-// --- ENUMS & CONFIG ---
+const char *FIRMWARE_VERSION = "v1.0.0";
+
 enum ModuleType
 {
   MOD_NONE,
-  MOD_SLIDERS,
   MOD_EXT_BTNS,
+  MOD_SLIDERS,
   MOD_KNOBS
 };
 ModuleType currentModule = MOD_SLIDERS;
@@ -32,11 +34,16 @@ HomeMode currentHomeMode = HOME_TESTING;
 
 bool backlightEnabled = true;
 const unsigned long LONG_PRESS_MS = 800;
+const int MENU_ENC_SENSITIVITY = 2;
 
-// Costruttore Display
+const int EEPROM_ADDR_MAGIC = 0;
+const int EEPROM_ADDR_HOME = 1;
+const int EEPROM_ADDR_MOD = 2;
+const int EEPROM_ADDR_LIGHT = 3;
+const byte MAGIC_NUMBER = 0x42;
+
 U8G2_SH1107_SEEED_128X128_1_HW_I2C u8g2(U8G2_R2, U8X8_PIN_NONE);
 
-// --- DUMMY DATA ---
 int cpuUsage = 45;
 int gpuUsage = 32;
 float memFree = 8.4;
@@ -46,11 +53,9 @@ int tempGPU = 58;
 float netDown = 12.5;
 float netUp = 4.2;
 
-// --- PIN DEFINITIONS ---
 const uint8_t PIN_ENC_CLK = 2;
 const uint8_t PIN_ENC_DT = 3;
 const uint8_t PIN_ENC_SW = 4;
-
 const uint8_t PIN_ROW_1 = 5;
 const uint8_t PIN_ROW_2 = 6;
 const uint8_t PIN_ROW_3 = 7;
@@ -58,60 +63,81 @@ const uint8_t PIN_COL_1 = 8;
 const uint8_t PIN_LED = 9;
 const uint8_t PIN_COL_2 = 10;
 const uint8_t PIN_COL_3 = 11;
-
 const uint8_t EXT_A0 = A0;
 const uint8_t EXT_A1 = A1;
 const uint8_t EXT_A2 = A2;
 const uint8_t EXT_A3 = A3;
 
-// --- VARS ---
 volatile long encoderValue = 0;
 long lastEncoderValue = 0;
 volatile int lastCLKState;
 unsigned long lastActionTime = 0;
-
 unsigned long btnPressStartTime = 0;
 bool btnPressed = false;
 bool longPressTriggered = false;
-
-int menuIndex = 0;
-const int MENU_ITEMS = 3;
+int menuIndex = 1;
+const int MENU_ITEMS = 4;
 int submenuIndex = 0;
 int submenuMaxItems = 0;
 
-// Stringhe Submenu (in PROGMEM per risparmiare RAM se servisse, ma qui sono poche)
-const char *subItemsHome[] = {"PC INFO BASIC", "PC INFO ADVANCE", "SPLASH IMAGE", "TESTING"};
+const char *subItemsHome[] = {"PC STATS", "PC STATS+", "SPLASH IMAGE", "TESTING"};
 const char *subItemsModules[] = {"NONE", "BUTTONS", "SLIDERS", "KNOBS"};
 const char *subItemsBacklight[] = {"YES", "NO"};
 
-// System Action
-char mainAction[16] = "Ready"; // char array invece di String per efficienza
+char mainAction[16] = "Ready";
 char extAction[24] = "";
 const int rows[] = {PIN_ROW_1, PIN_ROW_2, PIN_ROW_3};
 const int cols[] = {PIN_COL_1, PIN_COL_2, PIN_COL_3};
 const int NUM_READINGS = 16;
 bool moduleConnected = false;
 unsigned long disconnectTimer = 0;
+bool matrixActive = false;
 
-// --- DRAWING HELPERS ---
-void drawHomeIcon(int x, int y)
+void loadSettings()
 {
-  u8g2.drawTriangle(x, y - 28, x - 26, y, x + 26, y);
-  u8g2.drawFrame(x - 20, y, 40, 24);
-  u8g2.drawBox(x - 7, y + 9, 14, 15);
+  if (EEPROM.read(EEPROM_ADDR_MAGIC) == MAGIC_NUMBER)
+  {
+    currentHomeMode = (HomeMode)EEPROM.read(EEPROM_ADDR_HOME);
+    currentModule = (ModuleType)EEPROM.read(EEPROM_ADDR_MOD);
+    backlightEnabled = (bool)EEPROM.read(EEPROM_ADDR_LIGHT);
+  }
+}
+void saveSettings()
+{
+  EEPROM.update(EEPROM_ADDR_MAGIC, MAGIC_NUMBER);
+  EEPROM.update(EEPROM_ADDR_HOME, (uint8_t)currentHomeMode);
+  EEPROM.update(EEPROM_ADDR_MOD, (uint8_t)currentModule);
+  EEPROM.update(EEPROM_ADDR_LIGHT, (uint8_t)backlightEnabled);
 }
 
+void drawBackIcon(int x, int y)
+{
+  u8g2.drawTriangle(x - 16, y, x - 4, y - 10, x - 4, y + 10);
+  u8g2.drawBox(x - 4, y - 4, 16, 8);
+  u8g2.drawBox(x + 12, y - 4, 4, 14);
+}
+void drawHomeIcon(int x, int y)
+{
+  u8g2.drawTriangle(x, y - 26, x - 24, y, x + 24, y);
+  u8g2.drawBox(x - 18, y, 36, 20);
+  u8g2.setColorIndex(0);
+  u8g2.drawBox(x - 6, y + 8, 12, 12);
+  u8g2.setColorIndex(1);
+}
 void drawModulesIcon(int x, int y)
 {
   u8g2.drawRFrame(x - 28, y - 22, 56, 44, 4);
   u8g2.drawLine(x - 14, y - 15, x - 14, y + 15);
   u8g2.drawBox(x - 19, y - 4, 10, 8);
-  u8g2.drawBox(x + 6, y - 10, 6, 6);
-  u8g2.drawBox(x + 18, y - 10, 6, 6);
-  u8g2.drawBox(x + 6, y + 4, 6, 6);
-  u8g2.drawBox(x + 18, y + 4, 6, 6);
+  int btnSize = 6;
+  int gap = 12;
+  int startX = x + 4;
+  int startY = y - 10;
+  u8g2.drawBox(startX, startY, btnSize, btnSize);
+  u8g2.drawBox(startX + gap, startY, btnSize, btnSize);
+  u8g2.drawBox(startX, startY + gap + 4, btnSize, btnSize);
+  u8g2.drawBox(startX + gap, startY + gap + 4, btnSize, btnSize);
 }
-
 void drawBacklightIcon(int x, int y)
 {
   u8g2.drawCircle(x, y, 16);
@@ -124,14 +150,12 @@ void drawBacklightIcon(int x, int y)
   u8g2.drawLine(x + 14, y - 14, x + 20, y - 20);
 }
 
-// --- HARDWARE ---
 void setupExtModule()
 {
   pinMode(EXT_A0, INPUT);
   pinMode(EXT_A1, INPUT);
   pinMode(EXT_A2, INPUT);
   pinMode(EXT_A3, INPUT);
-
   if (currentModule == MOD_NONE)
   {
     moduleConnected = false;
@@ -163,7 +187,6 @@ int readSmooth(int pin)
   }
   return sum / NUM_READINGS;
 }
-
 int rawToPercent(int raw)
 {
   if (raw < 15)
@@ -187,7 +210,12 @@ void handleEncoder()
   }
 }
 
-// --- DISPLAY LOGIC ---
+void drawCenteredStr(int y, const char *str)
+{
+  int w = u8g2.getStrWidth(str);
+  u8g2.drawStr((128 - w) / 2, y, str);
+}
+
 void drawDefaultScreen()
 {
   if (currentHomeMode == HOME_BASIC)
@@ -201,38 +229,40 @@ void drawDefaultScreen()
   else if (currentHomeMode == HOME_SPLASH)
   {
     u8g2.setFont(u8g2_font_ncenB10_tr);
-    u8g2.drawStr(20, 60, "SPLASH");
+    drawCenteredStr(55, "CONSOLE");
+    drawCenteredStr(75, "DECK PRO");
+    u8g2.setFont(u8g2_font_6x10_tr);
+    drawCenteredStr(92, FIRMWARE_VERSION);
   }
   else
-  { // TESTING
+  {
+    char buf[32];
     u8g2.setFont(u8g2_font_ncenB08_tr);
-    u8g2.drawStr(0, 10, "DECK [TEST]");
-
+    drawCenteredStr(25, "TESTING MODE");
     u8g2.setFont(u8g2_font_6x10_tr);
-    u8g2.drawStr(0, 24, "Mod: ");
+    sprintf(buf, "Enc: %ld", encoderValue);
+    drawCenteredStr(45, buf);
     if (currentModule == MOD_NONE)
-      u8g2.drawStr(30, 24, "NONE");
+      sprintf(buf, "Mod: NONE");
     else if (!moduleConnected)
-      u8g2.drawStr(30, 24, "DISCONNECTED");
+      sprintf(buf, "Mod: DISCONN.");
     else if (currentModule == MOD_SLIDERS)
-      u8g2.drawStr(30, 24, "SLIDERS");
+      sprintf(buf, "Mod: SLIDERS");
     else if (currentModule == MOD_KNOBS)
-      u8g2.drawStr(30, 24, "KNOBS");
+      sprintf(buf, "Mod: KNOBS");
     else
-      u8g2.drawStr(30, 24, "BUTTONS");
-
-    u8g2.drawStr(0, 40, "Enc: ");
-    u8g2.setCursor(30, 40);
-    u8g2.print(encoderValue);
-    u8g2.drawStr(0, 55, "Main:");
-
-    u8g2.setFont(u8g2_font_ncenB10_tr);
-    u8g2.drawStr(0, 70, mainAction);
-
-    u8g2.setFont(u8g2_font_6x10_tr);
-    u8g2.drawStr(0, 90, "Ext Data:");
-    u8g2.setFont(u8g2_font_ncenB08_tr);
-    u8g2.drawStr(0, 105, (currentModule != MOD_NONE && moduleConnected) ? extAction : "- - -");
+      sprintf(buf, "Mod: BUTTONS");
+    drawCenteredStr(65, buf);
+    drawCenteredStr(85, mainAction);
+    u8g2.drawHLine(44, 95, 40);
+    if (currentModule != MOD_NONE && moduleConnected)
+    {
+      drawCenteredStr(110, extAction);
+    }
+    else
+    {
+      drawCenteredStr(110, "- NO DATA -");
+    }
   }
 }
 
@@ -241,24 +271,28 @@ void drawMenuScreen()
   int centerX = 64;
   int iconY = 50;
   int textY = 110;
-  u8g2.setFont(u8g2_font_ncenB10_tr); // Font Medio
+  u8g2.setFont(u8g2_font_ncenB10_tr);
 
   if (menuIndex == 0)
   {
-    drawHomeIcon(centerX, iconY);
-    u8g2.drawStr((128 - u8g2.getStrWidth("HOME")) / 2, textY, "HOME");
+    drawBackIcon(centerX, iconY);
+    drawCenteredStr(textY, "EXIT MENU");
   }
   else if (menuIndex == 1)
   {
-    drawModulesIcon(centerX, iconY);
-    u8g2.drawStr((128 - u8g2.getStrWidth("MODULES")) / 2, textY, "MODULES");
+    drawHomeIcon(centerX, iconY);
+    drawCenteredStr(textY, "HOME");
   }
   else if (menuIndex == 2)
   {
-    drawBacklightIcon(centerX, iconY);
-    u8g2.drawStr((128 - u8g2.getStrWidth("BACKLIGHT")) / 2, textY, "BACKLIGHT");
+    drawModulesIcon(centerX, iconY);
+    drawCenteredStr(textY, "MODULES");
   }
-
+  else if (menuIndex == 3)
+  {
+    drawBacklightIcon(centerX, iconY);
+    drawCenteredStr(textY, "BACKLIGHT");
+  }
   u8g2.setFont(u8g2_font_open_iconic_arrow_2x_t);
   if (menuIndex > 0)
     u8g2.drawGlyph(6, iconY + 5, 60);
@@ -268,17 +302,16 @@ void drawMenuScreen()
 
 void drawSubmenuScreen()
 {
-  u8g2.setFont(u8g2_font_ncenB10_tr); // Font Medio
+  u8g2.setFont(u8g2_font_ncenB08_tr);
   int startY = 20;
   int lineHeight = 16;
   const char **items;
-  if (menuIndex == 0)
+  if (menuIndex == 1)
     items = subItemsHome;
-  else if (menuIndex == 1)
+  else if (menuIndex == 2)
     items = subItemsModules;
   else
     items = subItemsBacklight;
-
   for (int i = 0; i < submenuMaxItems; i++)
   {
     int y = startY + (i * lineHeight);
@@ -306,12 +339,10 @@ void readExtModule()
 {
   if (currentModule == MOD_NONE)
     return;
-
   if (currentModule == MOD_SLIDERS || currentModule == MOD_KNOBS)
   {
     int raw1 = readSmooth(EXT_A0);
     int raw2 = readSmooth(EXT_A1);
-
     if (raw1 > 1018 && raw2 > 1018)
     {
       if (disconnectTimer == 0)
@@ -328,7 +359,6 @@ void readExtModule()
       disconnectTimer = 0;
       moduleConnected = true;
     }
-
     if (!moduleConnected)
       return;
     int p1 = rawToPercent(raw1);
@@ -336,7 +366,6 @@ void readExtModule()
     static int lp1 = -1, lp2 = -1;
     if (p1 != lp1 || p2 != lp2 || extAction[0] == '\0')
     {
-      // Uso sprintf leggero o costruzione manuale
       sprintf(extAction, "S1:%d%% S2:%d%%", p1, p2);
       lp1 = p1;
       lp2 = p2;
@@ -361,7 +390,6 @@ void readExtModule()
   }
 }
 
-// --- MAIN LOOP ---
 void setup()
 {
   u8g2.begin();
@@ -377,6 +405,7 @@ void setup()
     digitalWrite(rows[i], HIGH);
     pinMode(cols[i], INPUT_PULLUP);
   }
+  loadSettings();
   setupExtModule();
   lastCLKState = digitalRead(PIN_ENC_CLK);
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_CLK), handleEncoder, CHANGE);
@@ -388,7 +417,6 @@ void loop()
   bool update = false;
   unsigned long now = millis();
 
-  // BUTTON
   if (digitalRead(PIN_ENC_SW) == LOW)
   {
     if (!btnPressed)
@@ -401,7 +429,7 @@ void loop()
     {
       longPressTriggered = true;
       currentState = (currentState == STATE_DEFAULT) ? STATE_MENU : STATE_DEFAULT;
-      menuIndex = 0;
+      menuIndex = 1;
       update = true;
     }
   }
@@ -419,30 +447,46 @@ void loop()
         }
         else if (currentState == STATE_MENU)
         {
-          currentState = STATE_SUBMENU;
-          submenuIndex = 0;
           if (menuIndex == 0)
-            submenuMaxItems = 4;
-          else if (menuIndex == 1)
-            submenuMaxItems = 4;
+          {
+            currentState = STATE_DEFAULT;
+            update = true;
+          }
           else
-            submenuMaxItems = 2;
-          update = true;
+          {
+            currentState = STATE_SUBMENU;
+            if (menuIndex == 1)
+            {
+              submenuMaxItems = 4;
+              submenuIndex = (int)currentHomeMode;
+            }
+            else if (menuIndex == 2)
+            {
+              submenuMaxItems = 4;
+              submenuIndex = (int)currentModule;
+            }
+            else if (menuIndex == 3)
+            {
+              submenuMaxItems = 2;
+              submenuIndex = backlightEnabled ? 0 : 1;
+            }
+            update = true;
+          }
         }
         else if (currentState == STATE_SUBMENU)
         {
-          if (menuIndex == 0)
+          if (menuIndex == 1)
             currentHomeMode = (HomeMode)submenuIndex;
-          else if (menuIndex == 1)
+          else if (menuIndex == 2)
           {
             currentModule = (ModuleType)submenuIndex;
             setupExtModule();
           }
-          else if (menuIndex == 2)
+          else if (menuIndex == 3)
           {
             backlightEnabled = (submenuIndex == 0);
-            u8g2.setPowerSave(!backlightEnabled);
           }
+          saveSettings();
           currentState = STATE_MENU;
           update = true;
         }
@@ -451,18 +495,20 @@ void loop()
     }
   }
 
-  // ENCODER
   long diff = encoderValue - lastEncoderValue;
-  if (diff != 0)
+  if (currentState == STATE_DEFAULT && diff != 0)
   {
-    if (currentState == STATE_DEFAULT)
+    strcpy(mainAction, (diff > 0) ? "Enc Right" : "Enc Left");
+    lastActionTime = now;
+    lastEncoderValue = encoderValue;
+    update = true;
+  }
+  else if (currentState != STATE_DEFAULT && abs(diff) >= MENU_ENC_SENSITIVITY)
+  {
+    int dir = (diff > 0) ? 1 : -1;
+    if (currentState == STATE_MENU)
     {
-      strcpy(mainAction, (diff > 0) ? "Enc Right" : "Enc Left");
-      lastActionTime = now;
-    }
-    else if (currentState == STATE_MENU)
-    {
-      if (diff > 0)
+      if (dir > 0)
       {
         menuIndex++;
         if (menuIndex >= MENU_ITEMS)
@@ -477,7 +523,7 @@ void loop()
     }
     else
     {
-      if (diff > 0)
+      if (dir > 0)
       {
         submenuIndex++;
         if (submenuIndex >= submenuMaxItems)
@@ -494,7 +540,7 @@ void loop()
     update = true;
   }
 
-  // DEFAULT MODE LOGIC
+  matrixActive = false;
   if (currentState == STATE_DEFAULT)
   {
     char prevExt[24];
@@ -504,7 +550,6 @@ void loop()
     if (strcmp(prevExt, extAction) != 0 || prevConn != moduleConnected)
       update = true;
 
-    bool active = false;
     for (int r = 0; r < 3; r++)
     {
       digitalWrite(rows[r], LOW);
@@ -514,26 +559,26 @@ void loop()
         {
           sprintf(mainAction, "BTN %d", (c * 3) + r + 1);
           lastActionTime = now;
-          active = true;
-          digitalWrite(PIN_LED, HIGH);
+          matrixActive = true;
           update = true;
         }
       }
       digitalWrite(rows[r], HIGH);
     }
-
-    if (!active && strcmp(mainAction, "Ready") != 0)
+    if (!matrixActive && strcmp(mainAction, "Ready") != 0)
     {
       if (now - lastActionTime > 500)
       {
         strcpy(mainAction, "Ready");
         update = true;
       }
-      if (digitalRead(PIN_LED))
-        digitalWrite(PIN_LED, LOW);
     }
   }
 
+  if (backlightEnabled)
+    digitalWrite(PIN_LED, HIGH);
+  else
+    digitalWrite(PIN_LED, matrixActive ? HIGH : LOW);
   if (update)
     updateDisplay();
 }

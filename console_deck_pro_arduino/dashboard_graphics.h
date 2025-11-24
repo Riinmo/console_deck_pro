@@ -95,26 +95,35 @@ static void drawProgressBar(U8G2 &u8g2, int x, int y, int width, int height, int
 
 // --- LAYOUTS (Senza sprintf per risparmiare memoria) ---
 
+/* Draws the SIMPLE layout (Centered Parametric) */
 void drawSimpleLayout(U8G2 &u8g2, int cpuUsage, int pcTemp, float memFree)
 {
-    // Usiamo il font Medio (già caricato nel main) invece del B18 che è enorme
     u8g2.setFont(u8g2_font_ncenB10_tr);
 
-    // CPU
-    drawCpuIcon(u8g2, START_X_SIMPLE, 15);
-    u8g2.setCursor(START_X_SIMPLE + 25, 28);
+    const int BASE_Y = 28;
+    const int ROW_STEP = 32; // Distanza tra le righe
+    const int TEXT_OFF = 13; // Distanza verticale tra top icona e base testo
+
+    int currentY = BASE_Y;
+
+    // --- RIGA 1: CPU ---
+    drawCpuIcon(u8g2, START_X_SIMPLE, currentY);
+    u8g2.setCursor(START_X_SIMPLE + 25, currentY + TEXT_OFF);
     u8g2.print(cpuUsage);
-    u8g2.print(F("%"));
+    u8g2.print(F(" %"));
 
-    // TEMP
-    drawTempIcon(u8g2, START_X_SIMPLE, 45);
-    u8g2.setCursor(START_X_SIMPLE + 25, 60);
+    // --- RIGA 2: TEMP ---
+    currentY += ROW_STEP;
+    drawTempIcon(u8g2, START_X_SIMPLE - 4, currentY);
+    // (L'icona temp è un po' diversa, aggiustiamo il testo di 2px)
+    u8g2.setCursor(START_X_SIMPLE + 25, currentY + TEXT_OFF + 2);
     u8g2.print(pcTemp);
-    u8g2.print(F("\xb0C"));
+    u8g2.print(F(" C"));
 
-    // RAM
-    drawRamIcon(u8g2, START_X_SIMPLE, 80);
-    u8g2.setCursor(START_X_SIMPLE + 25, 92);
+    // --- RIGA 3: RAM ---
+    currentY += ROW_STEP;
+    drawRamIcon(u8g2, START_X_SIMPLE, currentY);
+    u8g2.setCursor(START_X_SIMPLE + 25, currentY + TEXT_OFF);
     u8g2.print(memFree, 1);
     u8g2.print(F(" GB"));
 }
