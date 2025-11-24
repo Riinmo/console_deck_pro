@@ -1,6 +1,6 @@
 {
-    "sketch": "pc_stast_oled_test\\pc_stast_oled_test.ino",
-    "port": "COM19",
+    "sketch": "console_deck_pro_arduino\\console_deck_pro_arduino.ino",
+    "port": "COM16",
     "configuration": "cpu=atmega328",
     "board": "arduino:avr:nano"
 }
