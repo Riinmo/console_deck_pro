@@ -14,6 +14,23 @@ from threading import Thread, Event
 import uvicorn
 from serial.tools import list_ports
 
+# Audio Utils (pycaw)
+try:
+    from ctypes import cast, POINTER
+    from comtypes import CLSCTX_ALL
+    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+    devices = AudioUtilities.GetSpeakers()
+    interface = devices.Activate(
+        IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+    volume = cast(interface, POINTER(IAudioEndpointVolume))
+    HAS_PYCAW = True
+    print("[INFO] pycaw initialized successfully. Using direct volume control.")
+except Exception as e:
+    volume = None
+    HAS_PYCAW = False
+    print(f"[WARNING] pycaw initialization failed: {e}")
+    print("[WARNING] Falling back to simulating key presses for volume control. This may be slower.")
+
 # GPU Utils (Optional)
 try:
     import GPUtil
@@ -56,15 +73,16 @@ def run_server():
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
 
 def load_config():
+    default_config = {
+        "serial": {
+            "port": None,
+            "baud_rate": 115200
+        },
+        "mappings": {}
+    }
+
     if not os.path.exists(CONFIG_FILE):
         print(f"Info: {CONFIG_FILE} not found. Creating a new one with default values.")
-        default_config = {
-            "serial": {
-                "port": None,
-                "baud_rate": 115200
-            },
-            "mappings": {}
-        }
         try:
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(default_config, f, indent=4)
@@ -78,10 +96,22 @@ def load_config():
             content = f.read()
             if not content.strip():
                 print(f"Warning: {CONFIG_FILE} is empty. Using default values.")
-                return {"serial": {"port": None}, "mappings": {}}
-            return json.loads(content)
+                return default_config
+            
+            config = json.loads(content)
+            # Ensure top-level keys exist
+            if "serial" not in config:
+                config["serial"] = default_config["serial"]
+            if "mappings" not in config:
+                config["mappings"] = default_config["mappings"]
+            
+            return config
+            
     except json.JSONDecodeError as e:
         print(f"Error parsing {CONFIG_FILE}: {e}")
+        return None
+    except Exception as e:
+        print(f"Error reading or updating {CONFIG_FILE}: {e}")
         return None
 
 def execute_action(action_def, absolute_value=None, multiplier=1):
@@ -141,25 +171,48 @@ def execute_action(action_def, absolute_value=None, multiplier=1):
             except Exception as e:
                 print(f"     [ERROR] Brightness control failed: {e}")
         elif action_type == 'set_volume':
-            # Absolute volume not easily supported via keys
-            print("     [WARNING] 'set_volume' (absolute) is not supported without pycaw. Using rough approximation or ignored.")
+            if HAS_PYCAW and volume:
+                # Value is expected to be 0-100 from UI/absolute controls
+                target_scalar = int(value) / 100.0
+                target_scalar = min(1.0, max(0.0, target_scalar))
+                volume.SetMasterVolumeLevelScalar(target_scalar, None)
+                print(f"     Set Absolute Volume Scalar: {target_scalar:.2f}")
+            else:
+                print("     [WARNING] 'set_volume' (absolute) is not supported without pycaw. Ignoring.")
             
         elif action_type == 'toggle_mute':
-            pyautogui.press('volumemute')
-            print("     Toggled Mute")
+            if HAS_PYCAW and volume:
+                is_muted = volume.GetMute()
+                volume.SetMute(not is_muted, None)
+                print(f"     Toggled Mute via pycaw: {not is_muted}")
+            else:
+                pyautogui.press('volumemute')
+                print("     Toggled Mute via pyautogui")
 
         elif action_type == 'change_volume':
-             # Simplified key-based control
-             # multiplier coming from encoder diff / 2.0
-             # We round it to nearest int to get number of key presses
-             
-             key = 'volumeup' if float(value) > 0 else 'volumedown'
-             count = int(round(abs(float(value)) * multiplier))
-             if count < 1: count = 1
-             
-             print(f"     Change Volume: {key} x {count}")
-             for _ in range(count):
-                 pyautogui.press(key)
+            if HAS_PYCAW and volume:
+                # multiplier is the number of physical detents turned.
+                # One detent = 2% volume change for a smoother feel.
+                change_amount = 0.02 * multiplier
+                
+                current_scalar = volume.GetMasterVolumeLevelScalar()
+
+                if float(value) > 0: # Increase volume
+                    new_scalar = min(1.0, current_scalar + change_amount)
+                else: # Decrease volume
+                    new_scalar = max(0.0, current_scalar - change_amount)
+                
+                volume.SetMasterVolumeLevelScalar(new_scalar, None)
+                print(f"     Set Volume Scalar: {current_scalar:.2f} -> {new_scalar:.2f}")
+
+            else: # Fallback to pyautogui
+                 key = 'volumeup' if float(value) > 0 else 'volumedown'
+                 count = int(round(abs(float(value)) * multiplier))
+                 if count < 1: count = 1
+                 
+                 print(f"     Change Volume (pyautogui): {key} x {count}")
+                 for _ in range(count):
+                     pyautogui.press(key)
         elif action_type == 'set_brightness':
             try:
                 sbc.set_brightness(int(value))
@@ -384,24 +437,31 @@ def process_serial_line(line, prev_main_btns, prev_enc_click, prev_enc_val, prev
 
         # Encoder Button Logic (Short vs Long Press) is stateful and complex,
         # for now, we assume the user doesn't press and rotate between serial messages.
+        # for now, we assume the user doesn't press and rotate between serial messages.
         # This part might need more robust state management if issues arise.
         if current_enc_click == 1 and prev_enc_click[0] == 0:
-            print(f"[EVENT] Encoder Clicked (Short)")
-            execute_action(config_data['mappings'].get('enc_click'))
+            print(f"[EVENT] Encoder Clicked (Mute)")
+            # Hardcoded action for mute
+            execute_action({"action": "toggle_mute"})
         prev_enc_click[0] = current_enc_click
 
 
         if prev_enc_val[0] is not None:
             diff = current_enc_val - prev_enc_val[0]
             if diff != 0: # Process only if there is a change
+                # The multiplier is based on how many "steps" the encoder moved.
+                # One physical detent on most encoders is 2 or 4 steps.
+                # Here, we assume 1 detent = 2 steps.
                 multiplier = abs(diff) / 2.0
                 
                 if diff > 0:
-                    print(f"[EVENT] Encoder Rotated CW (x{multiplier})")
-                    execute_action(config_data['mappings'].get('enc_cw'), multiplier=multiplier)
+                    print(f"[EVENT] Encoder Rotated CW (Volume Up)")
+                    # Hardcoded action for volume up
+                    execute_action({"action": "change_volume", "value": "1"}, multiplier=multiplier)
                 elif diff < 0:
-                    print(f"[EVENT] Encoder Rotated CCW (x{multiplier})")
-                    execute_action(config_data['mappings'].get('enc_ccw'), multiplier=multiplier)
+                    print(f"[EVENT] Encoder Rotated CCW (Volume Down)")
+                    # Hardcoded action for volume down
+                    execute_action({"action": "change_volume", "value": "-1"}, multiplier=multiplier)
         prev_enc_val[0] = current_enc_val
 
         if module_id == 1: # Buttons

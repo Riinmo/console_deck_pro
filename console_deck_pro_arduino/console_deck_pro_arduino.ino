@@ -4,7 +4,7 @@
 #include <EEPROM.h>
 #include "dashboard_graphics.h"
 
-const char *FIRMWARE_VERSION = "v1.1.0";
+const char *FIRMWARE_VERSION = "v1.2.0";
 
 enum ModuleType
 {
