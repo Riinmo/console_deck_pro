@@ -8,9 +8,13 @@ import 'package:http/http.dart' as http;
 class ConfigService {
   static const String _appName = "ConsoleDeckPro";
   static const String _fileName = "config.json";
+  static const String _backendBaseUrl = "http://127.0.0.1:8000";
 
   static Future<File> get _configFile async {
     Directory appDir;
+    // Legacy location (pre-unification). Used for one-time migration on desktop.
+    Directory? legacyDir;
+
     // On Windows, path_provider creates a subfolder with the app's ID.
     // The Python script expects the config directly in AppData/Roaming/ConsoleDeckPro.
     // To match this, we get the standard app support directory and navigate up to the parent
@@ -21,6 +25,24 @@ class ConfigService {
       // We need to go up two levels to get to AppData/Roaming
       final roamingDir = appSupportDir.parent.parent;
       appDir = Directory(p.join(roamingDir.path, _appName));
+    } else if (Platform.isMacOS) {
+      // Match Python backend: ~/Library/Application Support/ConsoleDeckPro
+      final appSupportDir = await getApplicationSupportDirectory();
+      final applicationSupportRoot = appSupportDir.parent; // .../Library/Application Support
+      appDir = Directory(p.join(applicationSupportRoot.path, _appName));
+      legacyDir = Directory(p.join(appSupportDir.path, _appName));
+    } else if (Platform.isLinux) {
+      // Match Python backend: $XDG_CONFIG_HOME/ConsoleDeckPro or ~/.config/ConsoleDeckPro
+      final xdg = Platform.environment['XDG_CONFIG_HOME'];
+      final home = Platform.environment['HOME'];
+      final base = (xdg != null && xdg.isNotEmpty)
+          ? xdg
+          : (home != null && home.isNotEmpty)
+              ? p.join(home, '.config')
+              : (await getApplicationSupportDirectory()).path;
+      appDir = Directory(p.join(base, _appName));
+      final appSupportDir = await getApplicationSupportDirectory();
+      legacyDir = Directory(p.join(appSupportDir.path, _appName));
     } else {
       // For other platforms, use the standard sandboxed directory.
       final directory = await getApplicationSupportDirectory();
@@ -31,8 +53,28 @@ class ConfigService {
       await appDir.create(recursive: true);
     }
     final filePath = p.join(appDir.path, _fileName);
+
+    // One-time migration from legacy desktop location if needed.
+    if (legacyDir != null) {
+      final legacyPath = p.join(legacyDir.path, _fileName);
+      final legacyFile = File(legacyPath);
+      final newFile = File(filePath);
+      if (!await newFile.exists() && await legacyFile.exists()) {
+        try {
+          await legacyFile.copy(filePath);
+          if (kDebugMode) {
+            print('[ConfigService] Migrated config from $legacyPath to $filePath');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('[ConfigService] Failed to migrate legacy config: $e');
+          }
+        }
+      }
+    }
+
     if (kDebugMode) {
-      print('[ConfigService] Using corrected config file path: $filePath');
+      print('[ConfigService] Using config file path: $filePath');
     }
     return File(filePath);
   }
@@ -41,34 +83,28 @@ class ConfigService {
   static Future<Map<String, dynamic>> loadConfig() async {
     try {
       final file = await _configFile;
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        return jsonDecode(content);
-      }
+      return _readConfigFile(file);
     } catch (e) {
       if (kDebugMode) {
         print('Error loading config: $e');
       }
     }
-    return {};
+    return {
+      'serial': {'port': null, 'baud_rate': 115200},
+      'mappings': <String, dynamic>{},
+      'special_modules': <String, dynamic>{},
+    };
   }
 
   // Save specific mapping
   static Future<void> saveMapping(String key, String type, String value) async {
     try {
       final file = await _configFile;
-      Map<String, dynamic> config = {};
-
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        try {
-          config = jsonDecode(content);
-        } catch (_) {}
-      }
-
-      if (config['mappings'] == null) {
-        config['mappings'] = {};
-      }
+      final config = await _readConfigFile(file);
+      final mappings = Map<String, dynamic>.from(
+        (config['mappings'] as Map?) ?? const {},
+      );
+      config['mappings'] = mappings;
 
       final Map<String, dynamic> entry = {};
 
@@ -93,14 +129,14 @@ class ConfigService {
           entry['action'] = 'set_brightness';
           break;
         case 'None':
-          (config['mappings'] as Map).remove(key);
+          mappings.remove(key);
           await _writeConfig(file, config);
           return;
         default:
           return;
       }
 
-      config['mappings'][key] = entry;
+      mappings[key] = entry;
       await _writeConfig(file, config);
     } catch (e) {
       if (kDebugMode) {
@@ -112,19 +148,16 @@ class ConfigService {
   static Future<void> saveSerialPort(String port) async {
     try {
       final file = await _configFile;
-      Map<String, dynamic> config = {};
-
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        try {
-          config = jsonDecode(content);
-        } catch (_) {}
+      final config = await _readConfigFile(file);
+      final serial = Map<String, dynamic>.from(
+        (config['serial'] as Map?) ?? const {},
+      );
+      final currentPort = serial['port'] as String?;
+      if (currentPort == port) {
+        return;
       }
-
-      if (config['serial'] == null) {
-        config['serial'] = {};
-      }
-      config['serial']['port'] = port;
+      serial['port'] = port;
+      config['serial'] = serial;
 
       await _writeConfig(file, config);
     } catch (e) {
@@ -132,6 +165,61 @@ class ConfigService {
         print('Error saving serial port: $e');
       }
     }
+  }
+
+  static Future<void> saveSpecialModuleConfig(
+    String moduleId,
+    Map<String, dynamic> moduleConfig, {
+    List<String> removeMappingKeys = const [],
+  }) async {
+    try {
+      final file = await _configFile;
+      final config = await _readConfigFile(file);
+
+      final specialModules = Map<String, dynamic>.from(
+        (config['special_modules'] as Map?) ?? const {},
+      );
+      specialModules[moduleId] = moduleConfig;
+      config['special_modules'] = specialModules;
+
+      if (removeMappingKeys.isNotEmpty) {
+        final mappings = Map<String, dynamic>.from(
+          (config['mappings'] as Map?) ?? const {},
+        );
+        for (final key in removeMappingKeys) {
+          mappings.remove(key);
+        }
+        config['mappings'] = mappings;
+      }
+
+      await _writeConfig(file, config);
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error saving special module config: $e');
+      }
+    }
+  }
+
+  static Future<Map<String, dynamic>> loadSpecialModuleConfig(
+    String moduleId,
+  ) async {
+    try {
+      final config = await loadConfig();
+      final specialModules =
+          config['special_modules'] as Map<String, dynamic>? ?? {};
+      final data = specialModules[moduleId];
+      if (data is Map<String, dynamic>) {
+        return data;
+      }
+      if (data is Map) {
+        return Map<String, dynamic>.from(data);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error loading special module config: $e');
+      }
+    }
+    return {};
   }
 
   static Future<void> _writeConfig(
@@ -143,12 +231,61 @@ class ConfigService {
 
     // Trigger reload in python backend
     try {
-      await http.post(Uri.parse('http://127.0.0.1:8000/reload'));
+      await http
+          .post(Uri.parse('$_backendBaseUrl/reload'))
+          .timeout(const Duration(seconds: 1));
     } catch (e) {
       if (kDebugMode) {
         print('Error triggering reload: $e');
       }
     }
+  }
+
+  static Future<Map<String, dynamic>> _readConfigFile(File file) async {
+    if (!await file.exists()) {
+      return {
+        'serial': {'port': null, 'baud_rate': 115200},
+        'mappings': <String, dynamic>{},
+        'special_modules': <String, dynamic>{},
+      };
+    }
+
+    try {
+      final content = await file.readAsString();
+      if (content.trim().isEmpty) {
+        return {
+          'serial': {'port': null, 'baud_rate': 115200},
+          'mappings': <String, dynamic>{},
+          'special_modules': <String, dynamic>{},
+        };
+      }
+
+      final decoded = jsonDecode(content);
+      if (decoded is Map) {
+        final normalized = Map<String, dynamic>.from(decoded);
+        final serial = Map<String, dynamic>.from(
+          (normalized['serial'] as Map?) ?? const {},
+        );
+        serial.putIfAbsent('port', () => null);
+        serial.putIfAbsent('baud_rate', () => 115200);
+        normalized['serial'] = serial;
+        normalized['mappings'] = Map<String, dynamic>.from(
+          (normalized['mappings'] as Map?) ?? const {},
+        );
+        normalized['special_modules'] = Map<String, dynamic>.from(
+          (normalized['special_modules'] as Map?) ?? const {},
+        );
+        return normalized;
+      }
+    } catch (_) {
+      // Fall through to a safe default config.
+    }
+
+    return {
+      'serial': {'port': null, 'baud_rate': 115200},
+      'mappings': <String, dynamic>{},
+      'special_modules': <String, dynamic>{},
+    };
   }
 
   static List<String> _parseHotkey(String combo) {
@@ -174,6 +311,8 @@ class ConfigService {
       type = 'Hotkey';
       if (val is List) {
         value = val.join('+').toUpperCase(); // Convert ["ctrl", "c"] -> CTRL+C
+      } else if (val is String) {
+        value = val;
       }
     } else if (action == 'set_volume') {
       type = 'Volume';
