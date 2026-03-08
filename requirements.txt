@@ -6,4 +6,4 @@ pyautogui
 screen-brightness-control
 psutil
 GPUtil
-python-vlc
+pygame

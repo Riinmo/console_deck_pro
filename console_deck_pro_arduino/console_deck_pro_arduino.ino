@@ -227,9 +227,9 @@ void loop()
               token = strtok(NULL, ",");
               if(token) ramUsage = atoi(token);
               token = strtok(NULL, ",");
-              if(token) pcTemp = atoi(token);
+              if(token) cpuFreqMHz = atoi(token);
               token = strtok(NULL, ",");
-              if(token) tempGPU = atoi(token);
+              if(token) gpuTempC = atoi(token);
               if (currentState == STATE_DEFAULT && currentHomeMode == HOME_PC_STATS) update = true;
           }
           break;  // process only one line per loop

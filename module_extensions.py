@@ -3,18 +3,17 @@ import os
 import platform
 import subprocess
 import threading
-import time
 import wave
 from array import array
 
 try:
-    import vlc
-    HAS_VLC = True
+    import pygame
+    HAS_PYGAME = True
 except Exception:
-    HAS_VLC = False
+    HAS_PYGAME = False
 
 try:
-    import winsound  # Windows fallback for default notes when VLC is unavailable
+    import winsound  # Windows fallback for default notes when pygame is unavailable
     HAS_WINSOUND = True
 except Exception:
     HAS_WINSOUND = False
@@ -104,10 +103,15 @@ class SpecialModuleManager:
         self.prev_piano_key = -1
         self.prev_piano_pressed = 0
 
-        self.vlc_available = HAS_VLC
-        self.left_player = None
-        self.right_player = None
-        self.piano_player = None
+        self.pygame_available = HAS_PYGAME
+        self.left_channel = None
+        self.right_channel = None
+        self.piano_channel = None
+        self.left_sound = None
+        self.right_sound = None
+        self.piano_sound = None
+        self.left_paused = False
+        self.right_paused = False
         self.left_loaded = None
         self.right_loaded = None
         self.last_crossfader = None
@@ -115,27 +119,29 @@ class SpecialModuleManager:
         self.notes_dir = os.path.join(self.app_dir, "notes_cache")
         os.makedirs(self.notes_dir, exist_ok=True)
 
-        if self.vlc_available:
-            self._init_vlc_players()
+        if self.pygame_available:
+            self._init_pygame_players()
         else:
-            self._log("[INFO] python-vlc not available. Special audio playback disabled.")
+            self._log("[INFO] pygame not available. Special audio playback disabled.")
 
     def _log(self, msg):
         print(msg)
 
-    def _init_vlc_players(self):
+    def _init_pygame_players(self):
         try:
-            self.left_player = vlc.MediaPlayer()
-            self.right_player = vlc.MediaPlayer()
-            self.piano_player = vlc.MediaPlayer()
-            self.left_player.audio_set_volume(50)
-            self.right_player.audio_set_volume(50)
+            if not pygame.mixer.get_init():
+                pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+            pygame.mixer.set_num_channels(8)
+            self.left_channel = pygame.mixer.Channel(0)
+            self.right_channel = pygame.mixer.Channel(1)
+            self.piano_channel = pygame.mixer.Channel(2)
+            self._log("[INFO] Using pygame audio backend.")
         except Exception as exc:
-            self.vlc_available = False
-            self.left_player = None
-            self.right_player = None
-            self.piano_player = None
-            self._log(f"[WARNING] VLC init failed: {exc}")
+            self.pygame_available = False
+            self.left_channel = None
+            self.right_channel = None
+            self.piano_channel = None
+            self._log(f"[WARNING] pygame init failed: {exc}")
 
     def update_config(self, config):
         with self.lock:
@@ -233,11 +239,9 @@ class SpecialModuleManager:
 
     def close(self):
         with self.lock:
-            for player in (self.left_player, self.right_player, self.piano_player):
-                if player is None:
-                    continue
+            if self.pygame_available:
                 try:
-                    player.stop()
+                    pygame.mixer.quit()
                 except Exception:
                     pass
 
@@ -253,10 +257,10 @@ class SpecialModuleManager:
         self._jog_deck(deck_name, step_ms)
 
     def _toggle_deck(self, deck_name):
-        if not self.vlc_available:
+        if not self.pygame_available:
             return
-        player = self.left_player if deck_name == "left" else self.right_player
-        if player is None:
+        channel = self.left_channel if deck_name == "left" else self.right_channel
+        if channel is None:
             return
 
         path = self.media_cfg["left_track"] if deck_name == "left" else self.media_cfg["right_track"]
@@ -265,58 +269,56 @@ class SpecialModuleManager:
                 self._log(f"[MEDIA] No track configured for {deck_name} deck.")
             return
 
-        if (deck_name == "left" and self.left_loaded != path) or (deck_name == "right" and self.right_loaded != path):
+        loaded = self.left_loaded if deck_name == "left" else self.right_loaded
+        if loaded != path:
             try:
-                media = vlc.Media(path)
-                player.set_media(media)
+                snd = pygame.mixer.Sound(path)
                 if deck_name == "left":
+                    self.left_sound = snd
                     self.left_loaded = path
+                    self.left_paused = False
                 else:
+                    self.right_sound = snd
                     self.right_loaded = path
+                    self.right_paused = False
             except Exception as exc:
-                self._log(f"[WARNING] Could not load {deck_name} track: {exc}")
+                self._log(f"[WARNING] Could not load {deck_name} track (pygame): {exc}")
                 return
 
-        state = player.get_state()
-        if state == vlc.State.Playing:
-            player.pause()
+        is_paused = self.left_paused if deck_name == "left" else self.right_paused
+        if channel.get_busy() and not is_paused:
+            channel.pause()
+            if deck_name == "left":
+                self.left_paused = True
+            else:
+                self.right_paused = True
             if self.event_log:
                 self._log(f"[MEDIA] {deck_name} deck paused")
             return
 
-        player.play()
-        # Give decoder a short moment, then restore crossfader volumes.
-        time.sleep(0.03)
+        if is_paused:
+            channel.unpause()
+            if deck_name == "left":
+                self.left_paused = False
+            else:
+                self.right_paused = False
+            if self.event_log:
+                self._log(f"[MEDIA] {deck_name} deck resumed")
+            return
+
+        snd = self.left_sound if deck_name == "left" else self.right_sound
+        if snd is None:
+            return
+        channel.play(snd)
         self._apply_crossfader()
         if self.event_log:
             self._log(f"[MEDIA] {deck_name} deck playing")
 
     def _jog_deck(self, deck_name, delta_ms):
-        if not self.vlc_available:
-            return
-        player = self.left_player if deck_name == "left" else self.right_player
-        if player is None:
-            return
-        try:
-            state = player.get_state()
-            if state in (vlc.State.NothingSpecial, vlc.State.Stopped, vlc.State.Error):
-                return
-            current = player.get_time()
-            if current < 0:
-                return
-            target = max(0, current + int(delta_ms))
-            player.set_time(target)
-            if self.event_log:
-                self._log(f"[MEDIA] {deck_name} jog {delta_ms}ms")
-        except Exception as exc:
-            self._log(f"[WARNING] Jog failed on {deck_name}: {exc}")
+        # pygame mixer does not provide reliable per-track seek in this setup.
+        return
 
     def _apply_crossfader(self):
-        if not self.vlc_available:
-            return
-        if self.left_player is None or self.right_player is None:
-            return
-
         cross = self.media_cfg.get("crossfader", 0.5)
         left_vol = int((1.0 - cross) * 100)
         right_vol = int(cross * 100)
@@ -324,8 +326,11 @@ class SpecialModuleManager:
         if self.last_crossfader == cross:
             return
 
-        self.left_player.audio_set_volume(left_vol)
-        self.right_player.audio_set_volume(right_vol)
+        if self.left_channel is None or self.right_channel is None:
+            return
+        self.left_channel.set_volume(left_vol / 100.0)
+        self.right_channel.set_volume(right_vol / 100.0)
+
         self.last_crossfader = cross
 
     def _play_piano_index(self, key_index):
@@ -345,14 +350,13 @@ class SpecialModuleManager:
         self._play_audio_file(file_to_play, note)
 
     def _play_audio_file(self, file_path, note_for_fallback):
-        if self.vlc_available and self.piano_player is not None:
+        if self.pygame_available and self.piano_channel is not None:
             try:
-                self.piano_player.stop()
-                self.piano_player.set_media(vlc.Media(file_path))
-                self.piano_player.play()
+                self.piano_sound = pygame.mixer.Sound(file_path)
+                self.piano_channel.play(self.piano_sound)
                 return
             except Exception as exc:
-                self._log(f"[WARNING] Piano playback via VLC failed: {exc}")
+                self._log(f"[WARNING] Piano playback via pygame failed: {exc}")
 
         if HAS_WINSOUND:
             freq = int(self.NOTE_FREQUENCIES.get(note_for_fallback, 440))

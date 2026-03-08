@@ -32,7 +32,10 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _loadConfig() async {
     final fullConfig = await ConfigService.loadConfig();
-    final mappings = fullConfig['mappings'] as Map<String, dynamic>? ?? {};
+    final mappingsRoot =
+        fullConfig['mappings'] as Map<String, dynamic>? ?? const {};
+    final mappings =
+        mappingsRoot['main'] as Map<String, dynamic>? ?? const {};
 
     if (mounted) {
       setState(() {

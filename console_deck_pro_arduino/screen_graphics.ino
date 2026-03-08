@@ -33,6 +33,16 @@ static void drawSmallTempIcon(U8G2 &u8g2, int x, int y)
     u8g2.drawDisc(x + 4, y + 8, 2);
 }
 
+static void drawSmallFreqIcon(U8G2 &u8g2, int x, int y)
+{
+    // Tiny waveform icon for CPU frequency
+    u8g2.drawFrame(x, y + 1, 10, 8);
+    u8g2.drawLine(x + 1, y + 7, x + 3, y + 5);
+    u8g2.drawLine(x + 3, y + 5, x + 5, y + 8);
+    u8g2.drawLine(x + 5, y + 8, x + 7, y + 3);
+    u8g2.drawLine(x + 7, y + 3, x + 9, y + 6);
+}
+
 static void drawProgressBar(U8G2 &u8g2, int x, int y, int width, int height, int percentage)
 {
     int filled = (percentage * width) / 100;
@@ -40,7 +50,7 @@ static void drawProgressBar(U8G2 &u8g2, int x, int y, int width, int height, int
     u8g2.drawBox(x, y, filled, height);
 }
 
-void drawStatsLayout(U8G2 &u8g2, int cpu, int gpu, int ram, int tempC, int tempG)
+void drawStatsLayout(U8G2 &u8g2, int cpu, int gpu, int ram, int cpuFreqMHz, int gpuTempC)
 {
     u8g2.setFont(u8g2_font_6x10_tr);
 
@@ -77,20 +87,24 @@ void drawStatsLayout(U8G2 &u8g2, int cpu, int gpu, int ram, int tempC, int tempG
     u8g2.print("%");
 
     y += H;
-    drawSmallTempIcon(u8g2, 3, y - 9);
-    u8g2.setCursor(14, y);
-    u8g2.print("C:");
-    if (tempC >= 0) {
-        u8g2.print(tempC);
-        u8g2.print("C");
+    drawSmallFreqIcon(u8g2, 3, y - 9);
+    u8g2.setCursor(16, y);
+    if (cpuFreqMHz > 0) {
+        int mhz = cpuFreqMHz; // Python sends CPU frequency in MHz
+        u8g2.print("F:");
+        u8g2.print(mhz / 1000);
+        u8g2.print(".");
+        u8g2.print((mhz % 1000) / 100);
+        u8g2.print("G");
     } else {
+        u8g2.print("F:");
         u8g2.print("N/A");
     }
-    drawSmallTempIcon(u8g2, 62, y - 9);
-    u8g2.setCursor(74, y);
-    u8g2.print("G:");
-    if (tempG >= 0) {
-        u8g2.print(tempG);
+    drawSmallTempIcon(u8g2, 58, y - 9);
+    u8g2.setCursor(70, y);
+    u8g2.print("GPU:");
+    if (gpuTempC >= 0) {
+        u8g2.print(gpuTempC);
         u8g2.print("C");
     } else {
         u8g2.print("N/A");
@@ -204,7 +218,7 @@ void drawDefaultScreen()
 
   if (currentHomeMode == HOME_PC_STATS)
   {
-    drawStatsLayout(u8g2, cpuUsage, gpuUsage, ramUsage, pcTemp, tempGPU);
+    drawStatsLayout(u8g2, cpuUsage, gpuUsage, ramUsage, cpuFreqMHz, gpuTempC);
   }
   else
   {

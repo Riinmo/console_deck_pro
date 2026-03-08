@@ -62,8 +62,11 @@ class _ModulesPageState extends State<ModulesPage> {
 
   Future<void> _loadConfig() async {
     final fullConfig = await ConfigService.loadConfig();
-    final mappings = Map<String, dynamic>.from(
+    final mappingsRoot = Map<String, dynamic>.from(
       (fullConfig['mappings'] as Map?) ?? const {},
+    );
+    final mappings = Map<String, dynamic>.from(
+      (mappingsRoot['modules'] as Map?) ?? const {},
     );
     final specialModules = Map<String, dynamic>.from(
       (fullConfig['special_modules'] as Map?) ?? const {},

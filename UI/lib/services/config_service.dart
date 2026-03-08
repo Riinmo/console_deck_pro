@@ -91,9 +91,39 @@ class ConfigService {
     }
     return {
       'serial': {'port': null, 'baud_rate': 115200},
-      'mappings': <String, dynamic>{},
+      'mappings': {
+        'main': <String, dynamic>{},
+        'modules': <String, dynamic>{},
+      },
       'special_modules': <String, dynamic>{},
     };
+  }
+
+  static bool _isMainMappingKey(String key) => key.startsWith('btn_');
+
+  static Map<String, dynamic> _normalizeMappings(Map<String, dynamic> config) {
+    final raw = Map<String, dynamic>.from((config['mappings'] as Map?) ?? const {});
+    Map<String, dynamic> main;
+    Map<String, dynamic> modules;
+
+    if (raw.containsKey('main') || raw.containsKey('modules')) {
+      main = Map<String, dynamic>.from((raw['main'] as Map?) ?? const {});
+      modules = Map<String, dynamic>.from((raw['modules'] as Map?) ?? const {});
+    } else {
+      main = <String, dynamic>{};
+      modules = <String, dynamic>{};
+      raw.forEach((k, v) {
+        if (_isMainMappingKey(k)) {
+          main[k] = v;
+        } else {
+          modules[k] = v;
+        }
+      });
+    }
+
+    final normalized = <String, dynamic>{'main': main, 'modules': modules};
+    config['mappings'] = normalized;
+    return normalized;
   }
 
   // Save specific mapping
@@ -101,10 +131,14 @@ class ConfigService {
     try {
       final file = await _configFile;
       final config = await _readConfigFile(file);
-      final mappings = Map<String, dynamic>.from(
-        (config['mappings'] as Map?) ?? const {},
+      final mappings = _normalizeMappings(config);
+      final mainMappings = Map<String, dynamic>.from(
+        (mappings['main'] as Map?) ?? const {},
       );
-      config['mappings'] = mappings;
+      final moduleMappings = Map<String, dynamic>.from(
+        (mappings['modules'] as Map?) ?? const {},
+      );
+      final target = _isMainMappingKey(key) ? mainMappings : moduleMappings;
 
       final Map<String, dynamic> entry = {};
 
@@ -129,14 +163,20 @@ class ConfigService {
           entry['action'] = 'set_brightness';
           break;
         case 'None':
-          mappings.remove(key);
+          target.remove(key);
+          mappings['main'] = mainMappings;
+          mappings['modules'] = moduleMappings;
+          config['mappings'] = mappings;
           await _writeConfig(file, config);
           return;
         default:
           return;
       }
 
-      mappings[key] = entry;
+      target[key] = entry;
+      mappings['main'] = mainMappings;
+      mappings['modules'] = moduleMappings;
+      config['mappings'] = mappings;
       await _writeConfig(file, config);
     } catch (e) {
       if (kDebugMode) {
@@ -183,12 +223,22 @@ class ConfigService {
       config['special_modules'] = specialModules;
 
       if (removeMappingKeys.isNotEmpty) {
-        final mappings = Map<String, dynamic>.from(
-          (config['mappings'] as Map?) ?? const {},
+        final mappings = _normalizeMappings(config);
+        final mainMappings = Map<String, dynamic>.from(
+          (mappings['main'] as Map?) ?? const {},
+        );
+        final moduleMappings = Map<String, dynamic>.from(
+          (mappings['modules'] as Map?) ?? const {},
         );
         for (final key in removeMappingKeys) {
-          mappings.remove(key);
+          if (_isMainMappingKey(key)) {
+            mainMappings.remove(key);
+          } else {
+            moduleMappings.remove(key);
+          }
         }
+        mappings['main'] = mainMappings;
+        mappings['modules'] = moduleMappings;
         config['mappings'] = mappings;
       }
 
@@ -245,7 +295,10 @@ class ConfigService {
     if (!await file.exists()) {
       return {
         'serial': {'port': null, 'baud_rate': 115200},
-        'mappings': <String, dynamic>{},
+        'mappings': {
+          'main': <String, dynamic>{},
+          'modules': <String, dynamic>{},
+        },
         'special_modules': <String, dynamic>{},
       };
     }
@@ -269,9 +322,7 @@ class ConfigService {
         serial.putIfAbsent('port', () => null);
         serial.putIfAbsent('baud_rate', () => 115200);
         normalized['serial'] = serial;
-        normalized['mappings'] = Map<String, dynamic>.from(
-          (normalized['mappings'] as Map?) ?? const {},
-        );
+        _normalizeMappings(normalized);
         normalized['special_modules'] = Map<String, dynamic>.from(
           (normalized['special_modules'] as Map?) ?? const {},
         );
@@ -283,7 +334,10 @@ class ConfigService {
 
     return {
       'serial': {'port': null, 'baud_rate': 115200},
-      'mappings': <String, dynamic>{},
+      'mappings': {
+        'main': <String, dynamic>{},
+        'modules': <String, dynamic>{},
+      },
       'special_modules': <String, dynamic>{},
     };
   }

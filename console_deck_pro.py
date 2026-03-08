@@ -12,7 +12,6 @@ from pathlib import Path
 import queue
 import psutil
 import ctypes
-import re
 from fastapi import FastAPI
 from threading import Thread, Event
 import uvicorn
@@ -433,8 +432,8 @@ class TelemetrySampler:
             "cpu": 0,
             "gpu": -1,
             "ram": 0,
-            "temp_cpu": -1,
-            "temp_gpu": -1,
+            "cpu_freq_mhz": -1,
+            "gpu_temp_c": -1,
         }
 
     def start(self):
@@ -457,8 +456,8 @@ class TelemetrySampler:
         last_time = time.monotonic()
         next_slow = 0.0
         gpu = -1
-        temp_gpu = -1
-        temp_cpu = -1
+        gpu_temp_c = -1
+        cpu_freq_mhz = -1
 
         while not self._stop.is_set():
             now = time.monotonic()
@@ -474,12 +473,13 @@ class TelemetrySampler:
             except Exception:
                 ram = 0
 
-            # Slow metrics (temperature/GPU) on a slower cadence
+            # Slow metrics (GPU temp + CPU frequency) on a slower cadence
             if now >= next_slow:
-                gpu, temp_gpu = _get_gpu_stats()
-                temp_cpu = get_cpu_temp()
-                if temp_cpu <= 0:
-                    temp_cpu = -1
+                gpu, gpu_temp_c = _get_gpu_stats()
+                freq_mhz = get_cpu_freq_mhz()
+                # Keep wire format unchanged (4th field still same position),
+                # but now it carries CPU frequency in MHz.
+                cpu_freq_mhz = freq_mhz if freq_mhz > 0 else -1
                 next_slow = now + self._slow_interval_s
 
             last_time = now
@@ -490,8 +490,8 @@ class TelemetrySampler:
                         "cpu": cpu,
                         "gpu": gpu,
                         "ram": ram,
-                        "temp_cpu": temp_cpu,
-                        "temp_gpu": temp_gpu,
+                        "cpu_freq_mhz": cpu_freq_mhz,
+                        "gpu_temp_c": gpu_temp_c,
                     }
                 )
 
@@ -636,17 +636,17 @@ def run_device_loop(ser):
                     cpu = snap["cpu"]
                     gpu = snap["gpu"]
                     ram = snap["ram"]
-                    temp_cpu = snap["temp_cpu"]
-                    temp_gpu = snap["temp_gpu"]
+                    cpu_freq_mhz = snap["cpu_freq_mhz"]
+                    gpu_temp_c = snap["gpu_temp_c"]
 
-                    stats_msg = f"STATS:{cpu},{gpu},{ram},{temp_cpu},{temp_gpu}\n"
+                    stats_msg = f"STATS:{cpu},{gpu},{ram},{cpu_freq_mhz},{gpu_temp_c}\n"
                     ser.write(stats_msg.encode("utf-8"))
                     if ENABLE_TELEMETRY_LOG:
                         gpu_str = f"{gpu}%" if gpu != -1 else "N/A"
-                        tq_str = f"{temp_cpu}C" if temp_cpu != -1 else "N/A"
-                        tg_str = f"{temp_gpu}C" if temp_gpu != -1 else "N/A"
+                        fq_str = f"{cpu_freq_mhz/1000.0:.1f}GHz" if cpu_freq_mhz > 0 else "N/A"
+                        tg_str = f"{gpu_temp_c}C" if gpu_temp_c != -1 else "N/A"
                         print(
-                            f"\r[STATS] CPU:{cpu}% RAM:{ram}% GPU:{gpu_str} | C:{tq_str} G:{tg_str}",
+                            f"\r[STATS] CPU:{cpu}% RAM:{ram}% GPU:{gpu_str} | F:{fq_str} G:{tg_str}",
                             end="",
                         )
 
@@ -793,137 +793,16 @@ def process_serial_line(line, prev_main_btns, prev_enc_click, prev_enc_val, prev
     except (ValueError, IndexError) as e:
         print(f"\n[WARNING] Could not parse serial line: '{line}'. Error: {e}")
 
-# --- HELPER FUNCTIONS ---
-def get_gpu_stats():
-    gpu = -1
-    temp_gpu = -1
-
-    if HAS_GPUTIL:
-        try:
-            gpus = GPUtil.getGPUs()
-            if gpus:
-                return int(gpus[0].load * 100), int(gpus[0].temperature)
-        except Exception:
-            pass
-
+def get_cpu_freq_mhz():
+    """Best-effort CPU frequency (MHz). Returns -1 if unavailable."""
     try:
-        output = subprocess.check_output(
-            [
-                "nvidia-smi",
-                "--query-gpu=utilization.gpu,temperature.gpu",
-                "--format=csv,noheader,nounits",
-            ],
-            stderr=subprocess.DEVNULL,
-            timeout=1,
-        ).decode("utf-8").strip()
-        parts_gpu = output.split(',')
-        if len(parts_gpu) >= 2:
-            gpu = int(parts_gpu[0].strip())
-            temp_gpu = int(parts_gpu[1].strip())
+        freq = psutil.cpu_freq()
+        if freq and freq.current:
+            mhz = int(freq.current)
+            if mhz > 0:
+                return mhz
     except Exception:
         pass
-
-    return gpu, temp_gpu
-
-
-def get_cpu_temp():
-    def _is_valid_temp(v):
-        return 10 <= v <= 120
-
-    # 1) psutil (cross-platform): collect best CPU-like candidate
-    try:
-        temps = psutil.sensors_temperatures()
-        if temps:
-            preferred = []
-            generic = []
-            for chip_name, entries in temps.items():
-                chip = (chip_name or "").lower()
-                for e in entries:
-                    curr = getattr(e, "current", None)
-                    if curr is None:
-                        continue
-                    try:
-                        val = float(curr)
-                    except Exception:
-                        continue
-                    if not _is_valid_temp(val):
-                        continue
-                    label = (getattr(e, "label", "") or "").lower()
-                    text = f"{chip} {label}"
-                    if any(k in text for k in ("cpu", "package", "core", "ccd", "tdie", "tctl", "k10temp", "coretemp")):
-                        preferred.append(val)
-                    else:
-                        generic.append(val)
-            if preferred:
-                return int(max(preferred))
-            if generic:
-                return int(max(generic))
-    except Exception:
-        pass
-
-    # 2) Windows-specific fallbacks
-    if platform.system() != "Windows":
-        return -1
-
-    kwargs = {"stderr": subprocess.DEVNULL, "timeout": 1.5}
-    if hasattr(subprocess, "CREATE_NO_WINDOW"):
-        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-
-    def _extract_temp_values(text):
-        vals = []
-        for m in re.findall(r"-?\d+(?:\.\d+)?", text or ""):
-            try:
-                v = float(m)
-            except Exception:
-                continue
-            if _is_valid_temp(v):
-                vals.append(v)
-        return vals
-
-    # 2a) LibreHardwareMonitor / OpenHardwareMonitor WMI namespaces
-    for ns in ("root/LibreHardwareMonitor", "root/OpenHardwareMonitor"):
-        try:
-            ps_cmd = (
-                f"Get-CimInstance -Namespace {ns} -ClassName Sensor "
-                "| Where-Object { $_.SensorType -eq 'Temperature' -and ($_.Name -match 'CPU|Package|Core|CCD|Tdie|Tctl') } "
-                "| Select-Object -ExpandProperty Value"
-            )
-            out = subprocess.check_output(["powershell", "-NoProfile", "-Command", ps_cmd], **kwargs).decode("utf-8", errors="ignore")
-            vals = _extract_temp_values(out)
-            if vals:
-                return int(max(vals))
-        except Exception:
-            pass
-
-    # 2b) ACPI thermal zone via PowerShell CIM (kelvin * 10)
-    try:
-        ps_cmd = (
-            "Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature "
-            "| Select-Object -ExpandProperty CurrentTemperature"
-        )
-        out = subprocess.check_output(["powershell", "-NoProfile", "-Command", ps_cmd], **kwargs).decode("utf-8", errors="ignore")
-        nums = re.findall(r"\d+", out or "")
-        for n in nums:
-            cels = (int(n) / 10.0) - 273.15
-            if _is_valid_temp(cels):
-                return int(cels)
-    except Exception:
-        pass
-
-    # 2c) Legacy WMIC fallback (some systems still expose this)
-    try:
-        out = subprocess.check_output(
-            ["wmic", "/namespace:\\\\root\\wmi", "PATH", "MSAcpi_ThermalZoneTemperature", "get", "CurrentTemperature", "/value"],
-            **kwargs,
-        ).decode("utf-8", errors="ignore")
-        nums = re.findall(r"CurrentTemperature=(\d+)", out or "")
-        for n in nums:
-            cels = (int(n) / 10.0) - 273.15
-            if _is_valid_temp(cels):
-                return int(cels)
-    except Exception:
-        pass
-
     return -1
 
 if __name__ == "__main__":

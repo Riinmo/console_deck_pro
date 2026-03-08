@@ -103,8 +103,8 @@ int serialBufIdx = 0;
 int cpuUsage = 45;
 int gpuUsage = 32;
 int ramUsage = 50;
-int pcTemp = 62;
-int tempGPU = 58;
+int cpuFreqMHz = 3600;
+int gpuTempC = 58;
 unsigned long lastStatsTime = 0;
 bool pcConnected = false;
 
