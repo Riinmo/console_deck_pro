@@ -17,22 +17,23 @@ import uvicorn
 from serial.tools import list_ports
 from module_extensions import SpecialModuleManager
 
-# Audio Utils (pycaw)
-try:
-    from ctypes import cast, POINTER
-    from comtypes import CLSCTX_ALL
-    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-    devices = AudioUtilities.GetSpeakers()
-    interface = devices.Activate(
-        IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-    volume = cast(interface, POINTER(IAudioEndpointVolume))
-    HAS_PYCAW = True
-    print("[INFO] pycaw initialized successfully. Using direct volume control.")
-except Exception as e:
-    volume = None
-    HAS_PYCAW = False
-    print(f"[WARNING] pycaw initialization failed: {e}")
-    print("[WARNING] Falling back to simulating key presses for volume control. This may be slower.")
+# Audio Utils (pycaw – Windows only; on macOS/Linux we use key simulation)
+volume = None
+HAS_PYCAW = False
+if platform.system() == "Windows":
+    try:
+        from ctypes import cast, POINTER
+        from comtypes import CLSCTX_ALL
+        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+        devices = AudioUtilities.GetSpeakers()
+        interface = devices.Activate(
+            IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        volume = cast(interface, POINTER(IAudioEndpointVolume))
+        HAS_PYCAW = True
+        print("[INFO] pycaw initialized successfully. Using direct volume control.")
+    except Exception as e:
+        print(f"[WARNING] pycaw initialization failed: {e}")
+        print("[WARNING] Falling back to simulating key presses for volume control.")
 
 # GPU Utils (Optional)
 try:
@@ -86,7 +87,8 @@ app = FastAPI()
 config_data = None
 config_updated_event = Event() # Used to signal the main thread to reload the config
 last_volume_target = None
-last_brightness_target = None
+# For slider brightness: store previous raw value so we apply delta, not absolute
+_last_brightness_slider_raw = None
 special_module_manager = SpecialModuleManager(
     APP_DIR,
     event_log=ENABLE_EVENT_LOG,
@@ -175,7 +177,7 @@ def ensure_config_loaded():
 
 
 def execute_action(action_def, absolute_value=None, multiplier=1):
-    global last_volume_target
+    global last_volume_target, _last_brightness_slider_raw
     if not action_def or not isinstance(action_def, dict):
         return
 
@@ -212,8 +214,9 @@ def execute_action(action_def, absolute_value=None, multiplier=1):
                 print(f"     Typing: {value}")
             pyautogui.write(value)
         elif action_type == 'brightness':
+            # Relative: current + value (encoder/button)
             if ENABLE_ACTION_LOG:
-                print(f"     Changing Brightness: {value}")
+                print(f"     Changing Brightness (delta): {value}")
             try:
                 current = sbc.get_brightness()
                 if isinstance(current, list): current = current[0]
@@ -252,14 +255,28 @@ def execute_action(action_def, absolute_value=None, multiplier=1):
             for _ in range(count):
                 pyautogui.press(key)
         elif action_type == 'set_brightness':
+            # Relative everywhere: from slider use delta of position; from config use value as delta
             try:
-                target = max(0, min(100, int(float(value))))
-                if last_brightness_target is not None and abs(target - last_brightness_target) < ANALOG_ABSOLUTE_DEADBAND:
-                    return
-                sbc.set_brightness(target)
-                last_brightness_target = target
+                current = sbc.get_brightness()
+                if isinstance(current, list): current = current[0]
+                if absolute_value is not None:
+                    # Slider: apply difference from previous position (raw 0–1023)
+                    raw = int(float(absolute_value))
+                    if _last_brightness_slider_raw is None:
+                        _last_brightness_slider_raw = raw
+                        return
+                    delta_raw = raw - _last_brightness_slider_raw
+                    _last_brightness_slider_raw = raw
+                    # Scale slider delta to brightness delta (~0–1023 -> ~0–100)
+                    delta_pct = round(delta_raw * 100.0 / 1023.0)
+                    new_val = min(100, max(0, current + delta_pct))
+                else:
+                    # Button/config: value is delta
+                    delta_pct = int(value)
+                    new_val = min(100, max(0, current + delta_pct))
+                sbc.set_brightness(new_val)
                 if ENABLE_ACTION_LOG:
-                    print(f"     Set Brightness: {target}%")
+                    print(f"     Brightness: {current} -> {new_val} (relative)")
             except Exception as e:
                 print(f"     [ERROR] Set Brightness failed: {e}")
         else:
@@ -385,8 +402,6 @@ class TelemetrySampler:
             "ram": 0,
             "temp_cpu": -1,
             "temp_gpu": -1,
-            "down_speed": 0.0,
-            "up_speed": 0.0,
         }
 
     def start(self):
@@ -406,7 +421,6 @@ class TelemetrySampler:
             return dict(self._snapshot)
 
     def _run(self):
-        last_net_recv, last_net_sent = get_net_bytes()
         last_time = time.monotonic()
         next_slow = 0.0
         gpu = -1
@@ -415,9 +429,6 @@ class TelemetrySampler:
 
         while not self._stop.is_set():
             now = time.monotonic()
-            dt = now - last_time
-            if dt <= 0:
-                dt = self._interval_s
 
             # Fast metrics (every tick)
             try:
@@ -430,14 +441,6 @@ class TelemetrySampler:
             except Exception:
                 ram = 0
 
-            curr_recv, curr_sent = get_net_bytes()
-            delta_recv = max(0, curr_recv - last_net_recv)
-            delta_sent = max(0, curr_sent - last_net_sent)
-            down_speed = (delta_recv * 8) / 1_000_000.0 / dt
-            up_speed = (delta_sent * 8) / 1_000_000.0 / dt
-            last_net_recv, last_net_sent = curr_recv, curr_sent
-            last_time = now
-
             # Slow metrics (temperature/GPU) on a slower cadence
             if now >= next_slow:
                 gpu, temp_gpu = _get_gpu_stats()
@@ -445,6 +448,8 @@ class TelemetrySampler:
                 if temp_cpu <= 0:
                     temp_cpu = -1
                 next_slow = now + self._slow_interval_s
+
+            last_time = now
 
             with self._lock:
                 self._snapshot.update(
@@ -454,8 +459,6 @@ class TelemetrySampler:
                         "ram": ram,
                         "temp_cpu": temp_cpu,
                         "temp_gpu": temp_gpu,
-                        "down_speed": float(down_speed),
-                        "up_speed": float(up_speed),
                     }
                 )
 
@@ -552,10 +555,8 @@ def run_device_loop(ser):
                     config_updated_event.clear()
 
                 now = time.monotonic()
-                # Bound the blocking read so config reloads and stats remain responsive.
-                timeout = max(0.0, next_stats_time - now)
-                if timeout > 0.2:
-                    timeout = 0.2
+                # Short timeout so we never block long: key presses are read within ~20ms
+                timeout = max(0.0, min(0.02, next_stats_time - now))
                 ser.timeout = timeout
 
                 raw = ser.readline()
@@ -575,6 +576,26 @@ def run_device_loop(ser):
                             prev_knob_vals,
                             action_executor,
                         )
+                    # Drain remaining lines so we don't lag behind Arduino
+                    while ser.in_waiting:
+                        raw = ser.readline()
+                        if not raw:
+                            break
+                        text = raw.decode("utf-8", errors="ignore")
+                        for line in text.splitlines():
+                            line = line.strip()
+                            if not line:
+                                continue
+                            process_serial_line(
+                                line,
+                                prev_main_btns,
+                                prev_enc_click,
+                                prev_enc_val,
+                                prev_ext_btns,
+                                prev_slider_vals,
+                                prev_knob_vals,
+                                action_executor,
+                            )
 
                 now = time.monotonic()
                 if now >= next_stats_time:
@@ -584,19 +605,15 @@ def run_device_loop(ser):
                     ram = snap["ram"]
                     temp_cpu = snap["temp_cpu"]
                     temp_gpu = snap["temp_gpu"]
-                    down_speed = snap["down_speed"]
-                    up_speed = snap["up_speed"]
 
-                    stats_msg = (
-                        f"STATS:{cpu},{gpu},{ram},{temp_cpu},{temp_gpu},{down_speed:.1f},{up_speed:.1f}\n"
-                    )
+                    stats_msg = f"STATS:{cpu},{gpu},{ram},{temp_cpu},{temp_gpu}\n"
                     ser.write(stats_msg.encode("utf-8"))
                     if ENABLE_TELEMETRY_LOG:
                         gpu_str = f"{gpu}%" if gpu != -1 else "N/A"
                         tq_str = f"{temp_cpu}C" if temp_cpu != -1 else "N/A"
                         tg_str = f"{temp_gpu}C" if temp_gpu != -1 else "N/A"
                         print(
-                            f"\r[STATS] CPU:{cpu}% Temp:{tq_str} | GPU:{gpu_str} Temp:{tg_str} | RAM:{ram}% | Net:D{down_speed:.1f}Mb/U{up_speed:.1f}Mb",
+                            f"\r[STATS] CPU:{cpu}% RAM:{ram}% GPU:{gpu_str} | C:{tq_str} G:{tg_str}",
                             end="",
                         )
 
@@ -721,15 +738,7 @@ def process_serial_line(line, prev_main_btns, prev_enc_click, prev_enc_val, prev
     except (ValueError, IndexError) as e:
         print(f"\n[WARNING] Could not parse serial line: '{line}'. Error: {e}")
 
-# State for Encoder Long Press
 # --- HELPER FUNCTIONS ---
-def get_net_bytes():
-    try:
-        c = psutil.net_io_counters()
-        return int(c.bytes_recv), int(c.bytes_sent)
-    except Exception:
-        return 0, 0
-
 def get_gpu_stats():
     gpu = -1
     temp_gpu = -1

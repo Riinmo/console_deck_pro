@@ -1,5 +1,7 @@
 import math
 import os
+import platform
+import subprocess
 import threading
 import time
 import wave
@@ -16,6 +18,20 @@ try:
     HAS_WINSOUND = True
 except Exception:
     HAS_WINSOUND = False
+
+
+def _play_wav_fallback(file_path):
+    """Play a WAV file using system player (macOS: afplay, Linux: aplay). No-op on Windows (uses winsound)."""
+    if not file_path or not os.path.isfile(file_path):
+        return
+    try:
+        system = platform.system()
+        if system == "Darwin":
+            subprocess.Popen(["afplay", file_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif system == "Linux":
+            subprocess.Popen(["aplay", "-q", file_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (FileNotFoundError, OSError):
+        pass
 
 
 class SpecialModuleManager:
@@ -345,6 +361,10 @@ class SpecialModuleManager:
                 winsound.Beep(freq, duration_ms)
             except Exception:
                 pass
+        else:
+            # macOS/Linux: play generated WAV with afplay/aplay when VLC and winsound are unavailable
+            wav_path = self._ensure_note_wav(note_for_fallback)
+            _play_wav_fallback(wav_path)
 
     def _ensure_note_wav(self, note):
         frequency = self.NOTE_FREQUENCIES.get(note, self.NOTE_FREQUENCIES["C4"])

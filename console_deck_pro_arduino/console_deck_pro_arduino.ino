@@ -2,128 +2,24 @@
 #include <U8g2lib.h>
 #include <Wire.h>
 #include <EEPROM.h>
-#include "dashboard_graphics.h"
+#include "console_deck_pro_globals.h"
 
-const char *FIRMWARE_VERSION = "v1.2.0";
-
-enum ModuleType
-{
-  MOD_NONE,
-  MOD_EXT_BTNS,
-  MOD_SLIDERS,
-  MOD_KNOBS
-};
-ModuleType currentModule = MOD_SLIDERS;
-
-enum ScreenState
-{
-  STATE_DEFAULT,
-  STATE_MENU,
-  STATE_SUBMENU,
-  STATE_CALIBRATION // New State
-};
-ScreenState currentState = STATE_DEFAULT;
-
-enum HomeMode
-{
-  HOME_BASIC,
-  HOME_ADVANCE,
-  HOME_SPLASH,
-  HOME_TESTING
-};
-HomeMode currentHomeMode = HOME_TESTING;
-
-bool backlightEnabled = true;
-const unsigned long LONG_PRESS_MS = 800;
-const int MENU_ENC_SENSITIVITY = 2;
-
-const int EEPROM_ADDR_MAGIC = 0;
-const int EEPROM_ADDR_HOME = 1;
-const int EEPROM_ADDR_MOD = 2;
-const int EEPROM_ADDR_LIGHT = 3;
-const byte MAGIC_NUMBER = 0x42;
-
-// --- NEW VARIABLES FOR CALIBRATION ---
-uint8_t btnMap[9] = {0, 1, 2, 3, 4, 5, 6, 7, 8};
-const int EEPROM_ADDR_MAP = 10;
-int calibStep = 0;
-bool calibWaitingRelease = false;
-
+// Display: single definition (constructor) — declared in globals.h
 U8G2_SH1107_SEEED_128X128_1_HW_I2C u8g2(U8G2_R2, U8X8_PIN_NONE);
-
-// --- OPTIMIZED VARIABLES ---
-// Removing String object. Using char buffer.
-char serialBuf[64];
-int serialBufIdx = 0;
-
-int cpuUsage = 45;
-int gpuUsage = 32;
-// Use int for RAM to save float lib overhead if possible, but float is small enough usually. 
-// Keeping floats for now, removing String is bigger win.
-float memFree = 8.4;
-float totalRAM = 16.0;
-int pcTemp = 62;
-int tempGPU = 58;
-float netDown = 12.5;
-float netUp = 4.2;
-
-const uint8_t PIN_ENC_CLK = 2;
-const uint8_t PIN_ENC_DT = 3;
-const uint8_t PIN_ENC_SW = 4;
-const uint8_t PIN_ROW_1 = 5;
-const uint8_t PIN_ROW_2 = 6;
-const uint8_t PIN_ROW_3 = 7;
-const uint8_t PIN_COL_1 = 8;
-const uint8_t PIN_LED = 9;
-const uint8_t PIN_COL_2 = 10;
-const uint8_t PIN_COL_3 = 11;
-const uint8_t EXT_A0 = A0;
-const uint8_t EXT_A1 = A1;
-const uint8_t EXT_A2 = A2;
-const uint8_t EXT_A3 = A3;
-const uint8_t EXT_A6 = A6;
-const uint8_t EXT_A7 = A7;
-
-volatile long encoderValue = 0;
-long lastEncoderValue = 0;
-volatile int lastCLKState;
-unsigned long lastActionTime = 0;
-unsigned long btnPressStartTime = 0;
-bool btnPressed = false;
-bool longPressTriggered = false;
-int menuIndex = 1;
-const int MENU_ITEMS = 5; // Updated to 5
-int submenuIndex = 0;
-int submenuMaxItems = 0;
-
-// Update Menu Name
-const char *subItemsHome[] = {"PC STATS", "PC STATS PLUS", "SPLASH IMAGE", "TESTING"};
-const char *subItemsModules[] = {"NONE", "BUTTONS", "SLIDERS", "KNOBS"};
-const char *subItemsBacklight[] = {"YES", "NO"};
-
-char mainAction[16] = "Ready";
-char extAction[24] = "";
-const int rows[] = {PIN_ROW_1, PIN_ROW_2, PIN_ROW_3};
-const int cols[] = {PIN_COL_1, PIN_COL_2, PIN_COL_3};
-const int NUM_READINGS = 16;
-bool moduleConnected = false;
-unsigned long disconnectTimer = 0;
-bool matrixActive = false;
-
-// Variabili per Serial Data
-int mainBtnStates[9] = {0};
-int extBtnStates[6] = {0};
-int serVal1 = 0;
-int serVal2 = 0;
 
 void loadSettings()
 {
   if (EEPROM.read(EEPROM_ADDR_MAGIC) == MAGIC_NUMBER)
   {
-    currentHomeMode = (HomeMode)EEPROM.read(EEPROM_ADDR_HOME);
+    int h = EEPROM.read(EEPROM_ADDR_HOME);
+    if (h <= 1) currentHomeMode = HOME_PC_STATS;
+    else if (h == 2) currentHomeMode = HOME_SPLASH;
+    else currentHomeMode = HOME_TESTING;
     currentModule = (ModuleType)EEPROM.read(EEPROM_ADDR_MOD);
     backlightEnabled = (bool)EEPROM.read(EEPROM_ADDR_LIGHT);
-    
+    int ss = EEPROM.read(EEPROM_ADDR_SCREENSAVER);
+    if (ss >= 0 && ss <= 5) screenSaverDelayIndex = ss;
+
     // Load Map
     for(int i=0; i<9; i++) {
        uint8_t val = EEPROM.read(EEPROM_ADDR_MAP + i);
@@ -132,88 +28,20 @@ void loadSettings()
     }
   }
 }
+
 void saveSettings()
 {
   EEPROM.update(EEPROM_ADDR_MAGIC, MAGIC_NUMBER);
   EEPROM.update(EEPROM_ADDR_HOME, (uint8_t)currentHomeMode);
   EEPROM.update(EEPROM_ADDR_MOD, (uint8_t)currentModule);
   EEPROM.update(EEPROM_ADDR_LIGHT, (uint8_t)backlightEnabled);
+  EEPROM.update(EEPROM_ADDR_SCREENSAVER, (uint8_t)screenSaverDelayIndex);
 }
+
 void saveBtnMap() {
   for(int i=0; i<9; i++) {
     EEPROM.update(EEPROM_ADDR_MAP + i, btnMap[i]);
   }
-}
-
-void drawBackIcon(int x, int y)
-{
-  // Exit Icon (Double Door Style)
-  // Left Side: Solid Block (The Door)
-  u8g2.drawBox(x - 14, y - 16, 14, 32);
-  
-  // Right Side: Empty Frame (The Exit)
-  u8g2.drawFrame(x + 2, y - 16, 14, 32);
-  
-  // Arrow: Pointing Right (Inside Right Frame)
-  u8g2.drawLine(x + 5, y, x + 10, y); // Shaft
-  u8g2.drawTriangle(x + 12, y, x + 9, y - 3, x + 9, y + 3); // Head
-}
-void drawHomeIcon(int x, int y)
-{
-  // Roof: Simple straight solid triangle
-  u8g2.drawTriangle(x, y - 24, x - 22, y, x + 22, y);
-  u8g2.drawBox(x - 18, y, 36, 20);
-  u8g2.setColorIndex(0);
-  u8g2.drawBox(x - 6, y + 8, 12, 12);
-  u8g2.setColorIndex(1);
-}
-void drawModulesIcon(int x, int y)
-{
-  u8g2.drawRFrame(x - 28, y - 22, 56, 44, 4);
-  u8g2.drawLine(x - 14, y - 15, x - 14, y + 15);
-  u8g2.drawBox(x - 19, y - 4, 10, 8);
-  int btnSize = 6;
-  int gap = 12;
-  int startX = x + 4;
-  int startY = y - 10;
-  u8g2.drawBox(startX, startY, btnSize, btnSize);
-  u8g2.drawBox(startX + gap, startY, btnSize, btnSize);
-  u8g2.drawBox(startX, startY + gap + 4, btnSize, btnSize);
-  u8g2.drawBox(startX + gap, startY + gap + 4, btnSize, btnSize);
-}
-void drawBacklightIcon(int x, int y)
-{
-  u8g2.drawCircle(x, y, 16);
-  u8g2.drawBox(x - 9, y + 14, 18, 5);
-  u8g2.drawHLine(x - 7, y + 20, 14);
-  u8g2.drawLine(x, y - 20, x, y - 28);
-  u8g2.drawLine(x - 20, y, x - 28, y);
-  u8g2.drawLine(x + 20, y, x + 28, y);
-  u8g2.drawLine(x - 14, y - 14, x - 20, y - 20);
-  u8g2.drawLine(x + 14, y - 14, x + 20, y - 20);
-}
-void drawSettingsIcon(int x, int y)
-{
-  // Bigger Gear
-  int r = 15;
-  u8g2.drawDisc(x, y, r);
-  
-  // Teeth (Thicker and longer)
-  u8g2.drawBox(x - 20, y - 4, 40, 8);
-  u8g2.drawBox(x - 4, y - 20, 8, 40);
-  
-  // Diagonals (Simulated with lines for simplicity, made thicker)
-  u8g2.drawLine(x - 14, y - 14, x + 14, y + 14);
-  u8g2.drawLine(x - 15, y - 14, x + 13, y + 14);
-  u8g2.drawLine(x - 13, y - 14, x + 15, y + 14);
-
-  u8g2.drawLine(x + 14, y - 14, x - 14, y + 14);
-  u8g2.drawLine(x + 15, y - 14, x - 13, y + 14);
-  u8g2.drawLine(x + 13, y - 14, x - 15, y + 14);
-  
-  u8g2.setColorIndex(0);
-  u8g2.drawDisc(x, y, 8); // Bigger hole
-  u8g2.setColorIndex(1);
 }
 
 void setupExtModule()
@@ -251,6 +79,7 @@ int readSmooth(int pin)
   }
   return sum / NUM_READINGS;
 }
+
 int rawToPercent(int raw)
 {
   if (raw < 15)
@@ -274,181 +103,17 @@ void handleEncoder()
   }
 }
 
-void drawCenteredStr(int y, const char *str)
-{
-  int w = u8g2.getStrWidth(str);
-  u8g2.drawStr((128 - w) / 2, y, str);
-}
-
-// ... (Globals)
-unsigned long lastStatsTime = 0;
-bool pcConnected = false;
-
-// ...
-
-void drawDefaultScreen()
-{
-  if (currentHomeMode == HOME_SPLASH)
-  {
-      // Always show Splash if selected
-      u8g2.setFont(u8g2_font_ncenB10_tr);
-      drawCenteredStr(55, "CONSOLE");
-      drawCenteredStr(75, "DECK PRO");
-      u8g2.setFont(u8g2_font_6x10_tr);
-      drawCenteredStr(92, FIRMWARE_VERSION);
-      return;
-  }
-
-  // Check Connection for Stats Modes
-  if ((currentHomeMode == HOME_BASIC || currentHomeMode == HOME_ADVANCE) && !pcConnected)
-  {
-      u8g2.setFont(u8g2_font_ncenB10_tr);
-      drawCenteredStr(60, "WAITING FOR");
-      drawCenteredStr(80, "PC DATA...");
-      u8g2.setFont(u8g2_font_6x10_tr);
-      drawCenteredStr(100, "(Run Python App)");
-      return;
-  }
-
-  if (currentHomeMode == HOME_BASIC)
-  {
-    drawSimpleLayout(u8g2, cpuUsage, pcTemp, memFree);
-  }
-  else if (currentHomeMode == HOME_ADVANCE)
-  {
-    drawAdvancedLayout(u8g2, cpuUsage, gpuUsage, memFree, totalRAM, pcTemp, tempGPU, netDown, netUp);
-  }
-  else // Testing Mode
-  {
-    char buf[32];
-    u8g2.setFont(u8g2_font_6x10_tr);
-    u8g2.setCursor(45, 30); u8g2.print("Enc: "); u8g2.print(encoderValue);
-
-    if (currentModule == MOD_NONE)
-      drawCenteredStr(65, "Mod: NONE");
-    else if (!moduleConnected)
-      drawCenteredStr(65, "Mod: DISCONN.");
-    else if (currentModule == MOD_SLIDERS)
-      drawCenteredStr(65, "Mod: SLIDERS");
-    else if (currentModule == MOD_KNOBS)
-      drawCenteredStr(65, "Mod: KNOBS");
-    else
-      drawCenteredStr(65, "Mod: BUTTONS");
-      
-    drawCenteredStr(85, mainAction);
-    u8g2.drawHLine(44, 95, 40);
-    if (currentModule != MOD_NONE && moduleConnected)
-    {
-      drawCenteredStr(110, extAction);
-    }
-    else
-    {
-      drawCenteredStr(110, "- NO DATA -");
-    }
-  }
-}
-
-void drawMenuScreen()
-{
-  int centerX = 64;
-  int iconY = 50;
-  int textY = 110;
-  u8g2.setFont(u8g2_font_ncenB10_tr);
-
-  if (menuIndex == 0)
-  {
-    drawBackIcon(centerX, iconY);
-    drawCenteredStr(textY, "EXIT MENU");
-  }
-  else if (menuIndex == 1)
-  {
-    drawHomeIcon(centerX, iconY);
-    drawCenteredStr(textY, "HOME");
-  }
-  else if (menuIndex == 2)
-  {
-    drawModulesIcon(centerX, iconY);
-    drawCenteredStr(textY, "MODULES");
-  }
-  else if (menuIndex == 3)
-  {
-    drawBacklightIcon(centerX, iconY);
-    drawCenteredStr(textY, "BACKLIGHT");
-  }
-  else if (menuIndex == 4)
-  {
-    drawSettingsIcon(centerX, iconY);
-    drawCenteredStr(textY, "CALIBRATION");
-  }
-  u8g2.setFont(u8g2_font_open_iconic_arrow_2x_t);
-  if (menuIndex > 0)
-    u8g2.drawGlyph(6, iconY + 5, 60);
-  if (menuIndex < MENU_ITEMS - 1)
-    u8g2.drawGlyph(112, iconY + 5, 61);
-}
-
-void drawSubmenuScreen()
-{
-  // REMOVED ncenB08, utilizing existing small font
-  u8g2.setFont(u8g2_font_6x10_tr);
-  int startY = 20;
-  int lineHeight = 16;
-  const char **items;
-  if (menuIndex == 1)
-    items = subItemsHome;
-  else if (menuIndex == 2)
-    items = subItemsModules;
-  else
-    items = subItemsBacklight;
-  for (int i = 0; i < submenuMaxItems; i++)
-  {
-    int y = startY + (i * lineHeight);
-    if (i == submenuIndex)
-      u8g2.drawStr(5, y, ">");
-    u8g2.drawStr(20, y, items[i]);
-  }
-}
-
-void drawCalibrationScreen() {
-    u8g2.setFont(u8g2_font_ncenB10_tr);
-    drawCenteredStr(30, "CALIBRATION");
-    
-    // Manual print instead of sprintf to save space
-    // Also reusing standard font instead of B14
-    u8g2.setCursor(20, 70); 
-    u8g2.print("PRESS BTN ");
-    u8g2.print(calibStep + 1);
-    
-    u8g2.setFont(u8g2_font_6x10_tr);
-    drawCenteredStr(100, "(Scan Matrix)");
-}
-
-void updateDisplay()
-{
-  u8g2.firstPage();
-  do
-  {
-    if (currentState == STATE_DEFAULT)
-      drawDefaultScreen();
-    else if (currentState == STATE_MENU)
-      drawMenuScreen();
-    else if (currentState == STATE_SUBMENU)
-      drawSubmenuScreen();
-    else if (currentState == STATE_CALIBRATION)
-      drawCalibrationScreen();
-  } while (u8g2.nextPage());
-}
-
 void readExtModule()
 {
   if (currentModule == MOD_NONE)
     return;
   if (currentModule == MOD_SLIDERS || currentModule == MOD_KNOBS)
   {
-    int raw1 = readSmooth(EXT_A0);
-    int raw2 = readSmooth(EXT_A1);
+    // Fast path: quick probe first. If module is disconnected, avoid expensive smoothing.
+    int quick1 = analogRead(EXT_A0);
+    int quick2 = analogRead(EXT_A1);
 
-    if (raw1 > 1018 && raw2 > 1018)
+    if (quick1 > 1018 && quick2 > 1018)
     {
       if (disconnectTimer == 0)
         disconnectTimer = millis();
@@ -467,8 +132,16 @@ void readExtModule()
     if (!moduleConnected)
       return;
 
-    int p1 = rawToPercent(raw1);
-    int p2 = rawToPercent(raw2);
+    // Lightweight filtering (IIR) instead of 16x analogRead + delay.
+    static int filt1 = -1;
+    static int filt2 = -1;
+    if (filt1 < 0) filt1 = quick1;
+    if (filt2 < 0) filt2 = quick2;
+    filt1 = (filt1 * 3 + quick1) / 4;
+    filt2 = (filt2 * 3 + quick2) / 4;
+
+    int p1 = rawToPercent(filt1);
+    int p2 = rawToPercent(filt2);
 
     // Update Serial Vars
     serVal1 = p1;
@@ -513,9 +186,11 @@ void readExtModule()
 void setup()
 {
   Serial.begin(115200); // SERIAL INIT
-  u8g2.begin();
   Wire.setClock(400000); // Fast I2C
-  u8g2.setFontMode(1);
+  if (ENABLE_DISPLAY) {
+    u8g2.begin();
+    u8g2.setFontMode(1);
+  }
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, LOW);
   pinMode(PIN_ENC_CLK, INPUT);
@@ -531,63 +206,53 @@ void setup()
   setupExtModule();
   lastCLKState = digitalRead(PIN_ENC_CLK);
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_CLK), handleEncoder, CHANGE);
-  updateDisplay();
+  lastActivityTime = millis();
+  if (ENABLE_DISPLAY) updateDisplay();
 }
 
 void loop()
 {
+  static unsigned long lastDisplayUpdate = 0;
+  static unsigned long lastModuleReadTime = 0;
+  static unsigned long lastUserInputTime = 0;
+  static ScreenState lastRenderedState = STATE_DEFAULT;
+  static bool lastRenderedScreenSaver = false;
+  static bool pendingDisplayUpdate = false;
   bool update = false;
   unsigned long now = millis();
 
-  // READ INCOMING SERIAL STATS using char buffer (no String class)
+  // READ INCOMING SERIAL: at most one line per loop to keep loop responsive (avoids lag on key press)
   while (Serial.available() > 0) {
       char c = Serial.read();
       if (c == '\n') {
           serialBuf[serialBufIdx] = '\0';
-          serialBufIdx = 0; // reset for next
-          
+          serialBufIdx = 0;
           if (strncmp(serialBuf, "STATS:", 6) == 0) {
               lastStatsTime = now;
               if (!pcConnected) { pcConnected = true; update = true; }
-              
               char* ptr = serialBuf + 6;
-              // strtok modifies string, so we go field by field
               char* token = strtok(ptr, ",");
               if(token) cpuUsage = atoi(token);
-              
               token = strtok(NULL, ",");
               if(token) gpuUsage = atoi(token);
-              
               token = strtok(NULL, ",");
-              if(token) { int ramP = atoi(token); totalRAM = 100; memFree = ramP; }
-              
+              if(token) ramUsage = atoi(token);
               token = strtok(NULL, ",");
               if(token) pcTemp = atoi(token);
-              
               token = strtok(NULL, ",");
               if(token) tempGPU = atoi(token);
-              
-              token = strtok(NULL, ",");
-              if(token) netDown = atof(token);
-              
-              token = strtok(NULL, ",");
-              if(token) netUp = atof(token);
-              
-              if (currentState == STATE_DEFAULT && (currentHomeMode == HOME_BASIC || currentHomeMode == HOME_ADVANCE)) {
-                  update = true;
-              }
+              if (currentState == STATE_DEFAULT && currentHomeMode == HOME_PC_STATS) update = true;
           }
+          break;  // process only one line per loop
       } else {
-          if (serialBufIdx < 63) {
-              serialBuf[serialBufIdx++] = c;
-          }
+          if (serialBufIdx < 47) serialBuf[serialBufIdx++] = c;
       }
   }
   
   // Check Timeout
   if (pcConnected && (now - lastStatsTime > 5000)) {
       pcConnected = false;
-      if (currentState == STATE_DEFAULT && (currentHomeMode == HOME_BASIC || currentHomeMode == HOME_ADVANCE)) {
+      if (currentState == STATE_DEFAULT && currentHomeMode == HOME_PC_STATS) {
           update = true;
       }
   }
@@ -612,6 +277,7 @@ void loop()
       }
       digitalWrite(rows[r], HIGH);
   }
+  if (pressedPhysicalId != -1) lastUserInputTime = now;
 
   // --- CALIBRATION LOGIC ---
   if (currentState == STATE_CALIBRATION) {
@@ -644,7 +310,7 @@ void loop()
            // Simple debounce could go here, but for now strict checking
       }
       
-      if (update) updateDisplay();
+      if (ENABLE_DISPLAY && update) updateDisplay();
       return; // Skip the rest of loop in calibration mode
   }
   
@@ -652,6 +318,7 @@ void loop()
 
   if (digitalRead(PIN_ENC_SW) == LOW)
   {
+    lastUserInputTime = now;
     if (!btnPressed)
     {
       btnPressed = true;
@@ -661,8 +328,13 @@ void loop()
     else if (!longPressTriggered && (now - btnPressStartTime > LONG_PRESS_MS))
     {
       longPressTriggered = true;
-      currentState = (currentState == STATE_DEFAULT) ? STATE_MENU : STATE_DEFAULT;
-      menuIndex = 1;
+      if (currentState == STATE_DEFAULT) {
+        currentState = STATE_MENU;
+        menuIndex = 1;
+      } else {
+        currentState = STATE_DEFAULT;
+        lastActivityTime = now;
+      }
       update = true;
     }
   }
@@ -680,11 +352,10 @@ void loop()
           }
           else if (currentState == STATE_MENU)
           {
-             if (menuIndex == 0) { currentState = STATE_DEFAULT; update = true; }
+             if (menuIndex == 0) { currentState = STATE_DEFAULT; lastActivityTime = now; update = true; }
              else if (menuIndex == 1) { 
-                 // Home actions
                  currentState = STATE_SUBMENU; 
-                 submenuMaxItems=4; 
+                 submenuMaxItems=3; 
                  submenuIndex=(int)currentHomeMode; 
                  update = true;
              }
@@ -701,6 +372,12 @@ void loop()
                  update = true;
              }
              else if (menuIndex == 4) { 
+                 currentState = STATE_SUBMENU; 
+                 submenuMaxItems=6; 
+                 submenuIndex=screenSaverDelayIndex; 
+                 update = true;
+             }
+             else if (menuIndex == 5) { 
                  currentState = STATE_CALIBRATION; 
                  calibStep = 0; 
                  calibWaitingRelease = true; // wait for release of any btn
@@ -717,9 +394,9 @@ void loop()
                 setupExtModule();
               }
               else if (menuIndex == 3)
-              {
                 backlightEnabled = (submenuIndex == 0);
-              }
+              else if (menuIndex == 4)
+                screenSaverDelayIndex = submenuIndex;
               saveSettings();
               currentState = STATE_MENU;
               update = true;
@@ -733,6 +410,7 @@ void loop()
   long diff = encoderValue - lastEncoderValue;
   if (currentState == STATE_DEFAULT && diff != 0)
   {
+    lastUserInputTime = now;
     strcpy(mainAction, (diff > 0) ? "Enc Right" : "Enc Left");
     lastActionTime = now;
     lastEncoderValue = encoderValue;
@@ -740,6 +418,7 @@ void loop()
   }
   else if (currentState != STATE_DEFAULT && abs(diff) >= MENU_ENC_SENSITIVITY)
   {
+      lastUserInputTime = now;
       int dir = (diff > 0) ? 1 : -1;
       if (currentState == STATE_MENU) {
           menuIndex += dir;
@@ -757,47 +436,27 @@ void loop()
   // --- OUTPUT GENERATION (DEFAULT STATE) ---
   if (currentState == STATE_DEFAULT)
   {
-     // Reset keys
-     for(int i=0; i<9; i++) mainBtnStates[i] = 0;
-     
-     // USE MAPPING: Scan -> p_id -> btnMap[p_id] -> mainBtnStates
-     // Re-scan matrix for logic safety (or reuse pressedPhysicalId from start of loop)
-     // To be robust against bouncing, we use the same scan logic we did at start of loop 
-     // but we need to iterate all rows/cols again if we didn't save full state.
-     
      matrixActive = false;
-     for (int r = 0; r < 3; r++)
-     {
-      digitalWrite(rows[r], LOW);
-      for (int c = 0; c < 3; c++)
-      {
-        if (digitalRead(cols[c]) == LOW)
-        {
-          int p_id = (c * 3) + r;
-          int mapped_id = btnMap[p_id];
-          
-          if(mapped_id >= 0 && mapped_id < 9) {
-             mainBtnStates[mapped_id] = 1; 
-             // Manual format
-             char newStr[16] = "BTN ";
-             char numStr[2]; 
-             itoa(mapped_id + 1, numStr, 10);
-             strcat(newStr, numStr);
-             
-             if (strcmp(mainAction, newStr) != 0) {
-                strcpy(mainAction, newStr);
-                update = true;
-             }
-          }
-          
-          lastActionTime = now;
-          matrixActive = true;
-          // update = true; // REMOVED: Only update if text changed above
-        }
-      }
-      digitalWrite(rows[r], HIGH);
+     for (int i = 0; i < 9; i++) mainBtnStates[i] = 0;
+     // Use first scan result (pressedPhysicalId) — no second scan, so press is sent sooner
+     if (pressedPhysicalId >= 0 && pressedPhysicalId < 9) {
+       int mapped_id = btnMap[pressedPhysicalId];
+       if (mapped_id >= 0 && mapped_id < 9) {
+         mainBtnStates[mapped_id] = 1;
+         char newStr[8];
+         strcpy(newStr, "BTN ");
+         char numStr[2];
+         itoa(mapped_id + 1, numStr, 10);
+         strcat(newStr, numStr);
+         if (strcmp(mainAction, newStr) != 0) {
+           strcpy(mainAction, newStr);
+           update = true;
+         }
+         lastActionTime = now;
+         matrixActive = true;
+       }
      }
-     
+
      if (!matrixActive && strcmp(mainAction, "Ready") != 0)
      {
        if (now - lastActionTime > 500)
@@ -807,12 +466,18 @@ void loop()
        }
      }
      
-     // Ext Module Read
-     char prevExt[24];
-     strcpy(prevExt, extAction);
-     bool prevConn = moduleConnected;
-     readExtModule();
-     if (strcmp(prevExt, extAction) != 0 || prevConn != moduleConnected) update = true;
+     // Sample external modules at a small fixed interval so button latency stays low.
+     if (currentModule != MOD_NONE && (now - lastModuleReadTime >= MODULE_READ_INTERVAL_MS)) {
+       char prevExt[20];
+       strcpy(prevExt, extAction);
+       bool prevConn = moduleConnected;
+       readExtModule();
+       if (strcmp(prevExt, extAction) != 0 || prevConn != moduleConnected) {
+         update = true;
+         lastUserInputTime = now;
+       }
+       lastModuleReadTime = now;
+     }
 
      // SERIAL PRINTS - OPTIMIZED
      // Only send if something changed or every 50ms heartbeat
@@ -834,54 +499,112 @@ void loop()
      }
      
      // Check Encoder
-     if(encoderValue != lastSentEnc || digitalRead(PIN_ENC_SW) == LOW) { // Always send if clicked to be safe
+     if(encoderValue != lastSentEnc || digitalRead(PIN_ENC_SW) == LOW) {
          dataChanged = true;
+     }
+
+     // Activity = "output not idle": based on the state you send (like the serial string)
+     // Idle = no button pressed, encoder not pressed or rotated, module with no input
+     bool outputIsIdle = true;
+     for (int i = 0; i < 9; i++) { if (mainBtnStates[i] != 0) { outputIsIdle = false; break; } }
+     if (digitalRead(PIN_ENC_SW) == LOW) outputIsIdle = false;
+     if (encoderValue != lastSentEnc) outputIsIdle = false;  // encoder rotation (e.g. volume)
+     if (currentModule == MOD_EXT_BTNS) {
+       for (int i = 0; i < 6; i++) { if (extBtnStates[i] != 0) { outputIsIdle = false; break; } }
+     }
+     if (!outputIsIdle) {
+         lastActivityTime = now;
+         if (screenSaverActive) screenSaverActive = false;
+     }
+     // Screen saver: after inactivity turn off screen (full black)
+     if (!screenSaverActive && screenSaverDelayIndex != 5 && SCREEN_SAVER_DELAY_MS[screenSaverDelayIndex] != 0
+         && (now - lastActivityTime >= SCREEN_SAVER_DELAY_MS[screenSaverDelayIndex])) {
+       screenSaverActive = true;
+       update = true;
+       lastDisplayUpdate = 0;  // force next redraw to show black screen
      }
 
      // Check Module
      if(currentModule == MOD_EXT_BTNS) {
          for(int i=0; i<6; i++) {
-             if(extBtnStates[i] != lastSentExtBtnStates[i]) { dataChanged = true; break; }
+             if(extBtnStates[i] != lastSentExtBtnStates[i]) { dataChanged = true; lastUserInputTime = now; break; }
          }
      } else if(currentModule == MOD_SLIDERS || currentModule == MOD_KNOBS) {
          if(abs(serVal1 - lastSentSer1) > 1 || abs(serVal2 - lastSentSer2) > 1) { // 1% deadband
              dataChanged = true;
+             lastUserInputTime = now;
          }
      }
 
-     if (dataChanged || (now - lastSerialTime > 50)) // 20Hz Heartbeat min
+     // Build one line and write it in one shot. This is faster than many Serial.print() calls
+     // and only requires enough TX space for the actual line length, not a fully empty buffer.
+     if (dataChanged || (now - lastSerialTime > 10))
      {
-         for (int i = 0; i < 9; i++) { 
-             Serial.print(mainBtnStates[i]); 
-             Serial.print(";"); 
-             lastSentBtnStates[i] = mainBtnStates[i];
+         char outBuf[80];
+         int len = 0;
+
+         for (int i = 0; i < 9 && len < (int)sizeof(outBuf) - 2; i++) {
+             outBuf[len++] = mainBtnStates[i] ? '1' : '0';
+             outBuf[len++] = ';';
          }
-         Serial.print(!digitalRead(PIN_ENC_SW)); Serial.print(";");
-         Serial.print(encoderValue); Serial.print(";");
-         lastSentEnc = encoderValue;
-         
-         Serial.print((int)currentModule);
-         if (currentModule != MOD_NONE) {
-            Serial.print(";");
-            if (currentModule == MOD_EXT_BTNS) {
-               for(int i=0; i<6; i++) { 
-                   Serial.print(extBtnStates[i]); 
-                   if(i<5) Serial.print(";"); 
-                   lastSentExtBtnStates[i] = extBtnStates[i];
-               }
-            } else {
-               Serial.print(serVal1); Serial.print(";"); Serial.print(serVal2);
-               lastSentSer1 = serVal1;
-               lastSentSer2 = serVal2;
-            }
+
+         len += snprintf(outBuf + len, sizeof(outBuf) - len, "%d;%ld;%d",
+                         !digitalRead(PIN_ENC_SW), encoderValue, (int)currentModule);
+
+         if (currentModule != MOD_NONE && len < (int)sizeof(outBuf) - 1) {
+             if (currentModule == MOD_EXT_BTNS) {
+                 len += snprintf(outBuf + len, sizeof(outBuf) - len, ";%d;%d;%d;%d;%d;%d",
+                                 extBtnStates[0], extBtnStates[1], extBtnStates[2],
+                                 extBtnStates[3], extBtnStates[4], extBtnStates[5]);
+             } else {
+                 len += snprintf(outBuf + len, sizeof(outBuf) - len, ";%d;%d", serVal1, serVal2);
+             }
          }
-         Serial.println();
-         lastSerialTime = now;
+
+         if (len > 0 && len < (int)sizeof(outBuf) - 1) {
+             outBuf[len++] = '\n';
+             if (Serial.availableForWrite() >= len) {
+                 Serial.write((const uint8_t*)outBuf, len);
+                 lastSerialTime = now;
+                 lastSentEnc = encoderValue;
+                 lastSentSer1 = serVal1;
+                 lastSentSer2 = serVal2;
+                 for (int i = 0; i < 9; i++) lastSentBtnStates[i] = mainBtnStates[i];
+                 for (int i = 0; i < 6; i++) lastSentExtBtnStates[i] = extBtnStates[i];
+             }
+         }
      }
   }
 
   if (backlightEnabled) digitalWrite(PIN_LED, HIGH);
   else digitalWrite(PIN_LED, matrixActive ? HIGH : LOW);
   
-  if (update) updateDisplay();
+  // Throttle display updates so the loop stays responsive (e.g. when Python is not running)
+  if (update) pendingDisplayUpdate = true;
+
+  bool inMenuLikeState = (currentState != STATE_DEFAULT);
+  unsigned long displayInterval = DISPLAY_UPDATE_INTERVAL_MS;
+  if (DISPLAY_PERFORMANCE_MODE) {
+    if (inMenuLikeState) {
+      // In menus we prioritize UI fluidity (no action burst to host).
+      displayInterval = DISPLAY_MENU_INTERVAL_MS;
+    } else {
+      displayInterval = ((now - lastUserInputTime) < DISPLAY_INPUT_BURST_WINDOW_MS)
+          ? DISPLAY_ACTIVE_INTERVAL_MS
+          : DISPLAY_IDLE_INTERVAL_MS;
+    }
+  }
+
+  bool forceDisplay = (currentState != lastRenderedState) || (screenSaverActive != lastRenderedScreenSaver);
+  bool inputBurstActive = ((now - lastUserInputTime) < DISPLAY_HARD_BLOCK_WINDOW_MS);
+  bool renderBlocked = DISPLAY_STRICT_INPUT_PRIORITY && !inMenuLikeState && inputBurstActive;
+
+  if (ENABLE_DISPLAY && pendingDisplayUpdate && !renderBlocked &&
+      (forceDisplay || (now - lastDisplayUpdate >= displayInterval))) {
+    lastDisplayUpdate = now;
+    updateDisplay();
+    lastRenderedState = currentState;
+    lastRenderedScreenSaver = screenSaverActive;
+    pendingDisplayUpdate = false;
+  }
 }
