@@ -71,7 +71,6 @@ const int cols[] = {PIN_COL_1, PIN_COL_2, PIN_COL_3};
 
 // --- Menu ---
 const int MENU_ITEMS = 6;
-const int NUM_READINGS = 16;
 
 // --- Display: defined in .ino (constructor) ---
 extern U8G2_SH1107_SEEED_128X128_1_HW_I2C u8g2;

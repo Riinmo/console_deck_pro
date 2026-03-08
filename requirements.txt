@@ -7,5 +7,3 @@ screen-brightness-control
 psutil
 GPUtil
 python-vlc
-# Windows-only (optional on macOS/Linux): pycaw for direct system volume control
-pycaw

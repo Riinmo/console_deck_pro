@@ -11,29 +11,59 @@ import platform
 from pathlib import Path
 import queue
 import psutil
+import ctypes
+import re
 from fastapi import FastAPI
 from threading import Thread, Event
 import uvicorn
 from serial.tools import list_ports
 from module_extensions import SpecialModuleManager
 
-# Audio Utils (pycaw – Windows only; on macOS/Linux we use key simulation)
-volume = None
-HAS_PYCAW = False
-if platform.system() == "Windows":
-    try:
-        from ctypes import cast, POINTER
-        from comtypes import CLSCTX_ALL
-        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-        devices = AudioUtilities.GetSpeakers()
-        interface = devices.Activate(
-            IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        volume = cast(interface, POINTER(IAudioEndpointVolume))
-        HAS_PYCAW = True
-        print("[INFO] pycaw initialized successfully. Using direct volume control.")
-    except Exception as e:
-        print(f"[WARNING] pycaw initialization failed: {e}")
-        print("[WARNING] Falling back to simulating key presses for volume control.")
+
+def _press_system_volume_key(key: str, count: int = 1):
+    """
+    Sends system volume keys in a platform-aware way.
+    On Windows, WM_APPCOMMAND simulates hardware volume keys directly.
+    """
+    if count < 1:
+        return
+
+    if platform.system() == "Windows":
+        # Prefer virtual media key injection; fallback to WM_APPCOMMAND broadcast.
+        vk_map = {
+            "volumeup": 0xAF,   # VK_VOLUME_UP
+            "volumedown": 0xAE, # VK_VOLUME_DOWN
+            "volumemute": 0xAD, # VK_VOLUME_MUTE
+        }
+        vk = vk_map.get(key)
+        if vk is None:
+            return
+
+        KEYEVENTF_KEYUP = 0x0002
+        try:
+            for _ in range(count):
+                ctypes.windll.user32.keybd_event(vk, 0, 0, 0)
+                ctypes.windll.user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
+            return
+        except Exception:
+            pass
+
+        # Fallback path (some systems react better to app commands).
+        try:
+            HWND_BROADCAST = 0xFFFF
+            WM_APPCOMMAND = 0x0319
+            app_map = {"volumeup": 10, "volumedown": 9, "volumemute": 8}
+            app_cmd = app_map.get(key)
+            if app_cmd is None:
+                return
+            for _ in range(count):
+                ctypes.windll.user32.SendMessageW(HWND_BROADCAST, WM_APPCOMMAND, 0, app_cmd << 16)
+            return
+        except Exception:
+            pass
+
+    for _ in range(count):
+        pyautogui.press(key)
 
 # GPU Utils (Optional)
 try:
@@ -125,15 +155,20 @@ def run_server():
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
 
 def load_config():
+    default_config = {
+        "serial": {
+            "port": None,
+            "baud_rate": 115200
+        },
+        "mappings": {
+            "main": {},
+            "modules": {}
+        },
+        "special_modules": {}
+    }
+
     if not os.path.exists(CONFIG_FILE):
         print(f"Info: {CONFIG_FILE} not found. Creating a new one with default values.")
-        default_config = {
-            "serial": {
-                "port": None,
-                "baud_rate": 115200
-            },
-            "mappings": {}
-        }
         try:
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(default_config, f, indent=4)
@@ -147,7 +182,7 @@ def load_config():
             content = f.read()
             if not content.strip():
                 print(f"Warning: {CONFIG_FILE} is empty. Using default values.")
-                return {"serial": {"port": None}, "mappings": {}}
+                return default_config
             return json.loads(content)
     except json.JSONDecodeError as e:
         print(f"Error parsing {CONFIG_FILE}: {e}. Backing up and resetting to defaults.")
@@ -172,7 +207,7 @@ def ensure_config_loaded():
     if not isinstance(config_data, dict):
         config_data = load_config()
     if not isinstance(config_data, dict):
-        config_data = {"serial": {"port": None, "baud_rate": 115200}, "mappings": {}, "special_modules": {}}
+        config_data = {"serial": {"port": None, "baud_rate": 115200}, "mappings": {"main": {}, "modules": {}}, "special_modules": {}}
     return config_data
 
 
@@ -238,11 +273,10 @@ def execute_action(action_def, absolute_value=None, multiplier=1):
             count = min(30, max(1, int(round(abs(delta) / 2.0))))
             if ENABLE_ACTION_LOG:
                 print(f"     Set Volume (approx): {key} x {count} (target {target}%)")
-            for _ in range(count):
-                pyautogui.press(key)
+            _press_system_volume_key(key, count)
             last_volume_target = target
         elif action_type == 'toggle_mute':
-            pyautogui.press('volumemute')
+            _press_system_volume_key('volumemute', 1)
             if ENABLE_ACTION_LOG:
                 print("     Toggled Mute")
         elif action_type == 'change_volume':
@@ -252,8 +286,7 @@ def execute_action(action_def, absolute_value=None, multiplier=1):
             if count > 25: count = 25
             if ENABLE_ACTION_LOG:
                 print(f"     Change Volume: {key} x {count}")
-            for _ in range(count):
-                pyautogui.press(key)
+            _press_system_volume_key(key, count)
         elif action_type == 'set_brightness':
             # Relative everywhere: from slider use delta of position; from config use value as delta
             try:
@@ -643,7 +676,30 @@ def process_serial_line(line, prev_main_btns, prev_enc_click, prev_enc_val, prev
     global config_data
 
     try:
-        mappings = config_data.get('mappings', {}) if isinstance(config_data, dict) else {}
+        mappings_raw = config_data.get('mappings', {}) if isinstance(config_data, dict) else {}
+        if not isinstance(mappings_raw, dict):
+            mappings_raw = {}
+
+        # Preferred schema:
+        # mappings.main -> main deck buttons (btn_1..btn_9)
+        # mappings.modules -> ext_btn/slider/knob mappings
+        if "main" in mappings_raw or "modules" in mappings_raw:
+            main_mappings = mappings_raw.get("main", {}) if isinstance(mappings_raw.get("main", {}), dict) else {}
+            module_mappings = mappings_raw.get("modules", {}) if isinstance(mappings_raw.get("modules", {}), dict) else {}
+        else:
+            # Backward compatibility: old flat mapping object.
+            main_mappings = {}
+            module_mappings = {}
+            for k, v in mappings_raw.items():
+                if isinstance(k, str) and k.startswith("btn_"):
+                    main_mappings[k] = v
+                else:
+                    module_mappings[k] = v
+
+        def get_mapping(key_name):
+            if isinstance(key_name, str) and key_name.startswith("btn_"):
+                return main_mappings.get(key_name)
+            return module_mappings.get(key_name)
         parts = line.split(';')
         if len(parts) < 12: 
             return
@@ -658,19 +714,18 @@ def process_serial_line(line, prev_main_btns, prev_enc_click, prev_enc_val, prev
                 if ENABLE_EVENT_LOG:
                     print(f"[EVENT] Main Button {i+1} Pressed")
                 btn_key = f"btn_{i+1}"
-                action_executor.submit(mappings.get(btn_key))
+                action_executor.submit(get_mapping(btn_key))
         # Update state for the next line processing
         for i in range(9):
             prev_main_btns[i] = current_main_btns[i]
 
-        # Encoder Button Logic (Short vs Long Press) is stateful and complex,
-        # for now, we assume the user doesn't press and rotate between serial messages.
-        # for now, we assume the user doesn't press and rotate between serial messages.
-        # This part might need more robust state management if issues arise.
+        # Encoder is fixed-function (not configurable via JSON):
+        # - click => toggle mute
+        # - rotate CW/CCW => change volume
         if current_enc_click == 1 and prev_enc_click[0] == 0:
             if ENABLE_EVENT_LOG:
                 print(f"[EVENT] Encoder Clicked (Short)")
-            execute_action(mappings.get('enc_click'))
+            execute_action({"action": "toggle_mute", "value": None})
         prev_enc_click[0] = current_enc_click
 
         if prev_enc_val[0] is not None:
@@ -680,11 +735,11 @@ def process_serial_line(line, prev_main_btns, prev_enc_click, prev_enc_val, prev
                 if diff > 0:
                     if ENABLE_EVENT_LOG:
                         print(f"[EVENT] Encoder Rotated CW (x{multiplier})")
-                    execute_action(mappings.get('enc_cw'), multiplier=multiplier)
+                    execute_action({"action": "change_volume", "value": 1}, multiplier=multiplier)
                 elif diff < 0:
                     if ENABLE_EVENT_LOG:
                         print(f"[EVENT] Encoder Rotated CCW (x{multiplier})")
-                    execute_action(mappings.get('enc_ccw'), multiplier=multiplier)
+                    execute_action({"action": "change_volume", "value": -1}, multiplier=multiplier)
         prev_enc_val[0] = current_enc_val
 
         if module_id == 1: # Buttons
@@ -695,7 +750,7 @@ def process_serial_line(line, prev_main_btns, prev_enc_click, prev_enc_val, prev
                             if ENABLE_EVENT_LOG:
                                 print(f"[EVENT] Ext Button {i+1} Pressed")
                             btn_key = f"ext_btn_{i+1}"
-                            action_executor.submit(mappings.get(btn_key))
+                            action_executor.submit(get_mapping(btn_key))
                 for i in range(6):
                     prev_ext_btns[i] = current_ext_btns[i]
                 
@@ -709,7 +764,7 @@ def process_serial_line(line, prev_main_btns, prev_enc_click, prev_enc_val, prev
                 prev_vals = prev_slider_vals if is_slider else prev_knob_vals
                 
                 def handle_analog(curr, prev, name):
-                    abs_mapping = mappings.get(name)
+                    abs_mapping = get_mapping(name)
                     if abs_mapping:
                         if curr != prev:
                             action_executor.submit(abs_mapping, absolute_value=curr)
@@ -721,10 +776,10 @@ def process_serial_line(line, prev_main_btns, prev_enc_click, prev_enc_val, prev
                     if abs(diff) > 2:
                         if diff > 0:
                             print(f"[EVENT] {name} Moved UP/CW (Val: {curr})")
-                            action_executor.submit(mappings.get(f"{name}_up" if is_slider else f"{name}_cw"))
+                            action_executor.submit(get_mapping(f"{name}_up" if is_slider else f"{name}_cw"))
                         else:
                             print(f"[EVENT] {name} Moved DOWN/CCW (Val: {curr})")
-                            action_executor.submit(mappings.get(f"{name}_down" if is_slider else f"{name}_ccw"))
+                            action_executor.submit(get_mapping(f"{name}_down" if is_slider else f"{name}_ccw"))
                         return curr
                     return prev
 
@@ -772,36 +827,104 @@ def get_gpu_stats():
 
 
 def get_cpu_temp():
-    # Try psutil
-    t = -1
+    def _is_valid_temp(v):
+        return 10 <= v <= 120
+
+    # 1) psutil (cross-platform): collect best CPU-like candidate
     try:
         temps = psutil.sensors_temperatures()
         if temps:
-            for name, entries in temps.items():
-                if 'cpu' in name.lower() or 'core' in name.lower() or 'package' in name.lower():
-                    val = int(entries[0].current)
-                    if val > 0: 
-                        t = val
-                        break
+            preferred = []
+            generic = []
+            for chip_name, entries in temps.items():
+                chip = (chip_name or "").lower()
+                for e in entries:
+                    curr = getattr(e, "current", None)
+                    if curr is None:
+                        continue
+                    try:
+                        val = float(curr)
+                    except Exception:
+                        continue
+                    if not _is_valid_temp(val):
+                        continue
+                    label = (getattr(e, "label", "") or "").lower()
+                    text = f"{chip} {label}"
+                    if any(k in text for k in ("cpu", "package", "core", "ccd", "tdie", "tctl", "k10temp", "coretemp")):
+                        preferred.append(val)
+                    else:
+                        generic.append(val)
+            if preferred:
+                return int(max(preferred))
+            if generic:
+                return int(max(generic))
     except Exception:
         pass
-    
-    # If invalid, Try WMI (Windows only)
-    if t <= 0 and platform.system() == "Windows":
+
+    # 2) Windows-specific fallbacks
+    if platform.system() != "Windows":
+        return -1
+
+    kwargs = {"stderr": subprocess.DEVNULL, "timeout": 1.5}
+    if hasattr(subprocess, "CREATE_NO_WINDOW"):
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+    def _extract_temp_values(text):
+        vals = []
+        for m in re.findall(r"-?\d+(?:\.\d+)?", text or ""):
+            try:
+                v = float(m)
+            except Exception:
+                continue
+            if _is_valid_temp(v):
+                vals.append(v)
+        return vals
+
+    # 2a) LibreHardwareMonitor / OpenHardwareMonitor WMI namespaces
+    for ns in ("root/LibreHardwareMonitor", "root/OpenHardwareMonitor"):
         try:
-            ps_cmd = "Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace \"root/wmi\" | Select -ExpandProperty CurrentTemperature"
-            kwargs = {}
-            # CREATE_NO_WINDOW is not defined on non-Windows and may not exist in some environments.
-            if hasattr(subprocess, "CREATE_NO_WINDOW"):
-                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-            out = subprocess.check_output(["powershell", "-c", ps_cmd], **kwargs).decode().strip()
-            if out and out.isdigit():
-                kelvin_x10 = int(out)
-                cels = (kelvin_x10 / 10.0) - 273.15
-                t = int(cels)
+            ps_cmd = (
+                f"Get-CimInstance -Namespace {ns} -ClassName Sensor "
+                "| Where-Object { $_.SensorType -eq 'Temperature' -and ($_.Name -match 'CPU|Package|Core|CCD|Tdie|Tctl') } "
+                "| Select-Object -ExpandProperty Value"
+            )
+            out = subprocess.check_output(["powershell", "-NoProfile", "-Command", ps_cmd], **kwargs).decode("utf-8", errors="ignore")
+            vals = _extract_temp_values(out)
+            if vals:
+                return int(max(vals))
         except Exception:
             pass
-    return t
+
+    # 2b) ACPI thermal zone via PowerShell CIM (kelvin * 10)
+    try:
+        ps_cmd = (
+            "Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature "
+            "| Select-Object -ExpandProperty CurrentTemperature"
+        )
+        out = subprocess.check_output(["powershell", "-NoProfile", "-Command", ps_cmd], **kwargs).decode("utf-8", errors="ignore")
+        nums = re.findall(r"\d+", out or "")
+        for n in nums:
+            cels = (int(n) / 10.0) - 273.15
+            if _is_valid_temp(cels):
+                return int(cels)
+    except Exception:
+        pass
+
+    # 2c) Legacy WMIC fallback (some systems still expose this)
+    try:
+        out = subprocess.check_output(
+            ["wmic", "/namespace:\\\\root\\wmi", "PATH", "MSAcpi_ThermalZoneTemperature", "get", "CurrentTemperature", "/value"],
+            **kwargs,
+        ).decode("utf-8", errors="ignore")
+        nums = re.findall(r"CurrentTemperature=(\d+)", out or "")
+        for n in nums:
+            cels = (int(n) / 10.0) - 273.15
+            if _is_valid_temp(cels):
+                return int(cels)
+    except Exception:
+        pass
+
+    return -1
 
 if __name__ == "__main__":
     try:

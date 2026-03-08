@@ -13,7 +13,7 @@ Lo script Python e l’UI Flutter sono pensati per funzionare su **Windows**, **
 
 | Funzione            | Windows              | macOS                    | Linux                         |
 |---------------------|----------------------|---------------------------|-------------------------------|
-| **Volume (assoluto)** | pycaw (API audio)   | Tasti volume (simulazione) | Tasti volume (simulazione)    |
+| **Volume** | Tasti volume (WinAPI/APPCOMMAND) | Tasti volume (simulazione) | Tasti volume (simulazione)    |
 | **Luminosità**      | sbc (WMI/VCP)        | Non supportata da sbc*    | sbc (es. `sys/backlight`)     |
 | **Temperatura CPU** | psutil o WMI         | psutil                    | psutil                        |
 | **GPU / nvidia-smi**| Opzionale            | N/A                       | Se presente, usata per stats  |
@@ -32,8 +32,7 @@ L’UI Flutter usa gli stessi path (e migra da eventuali path legacy se presenti
 ## Dipendenze Python
 
 - **Comuni**: `fastapi`, `uvicorn`, `pyserial`, `pyautogui`, `psutil`, `screen-brightness-control`, `python-vlc`
-- **Solo Windows** (opzionali): `pycaw` (volume di sistema diretto), `GPUtil` (GPU)
-- Su macOS/Linux puoi non installare `pycaw`; il backend userà i tasti volume.
+- **Solo Windows** (opzionali): `GPUtil` (GPU)
 
 ## Requisiti extra su Linux
 

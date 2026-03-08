@@ -69,17 +69,6 @@ void setupExtModule()
   }
 }
 
-int readSmooth(int pin)
-{
-  long sum = 0;
-  for (int i = 0; i < NUM_READINGS; i++)
-  {
-    sum += analogRead(pin);
-    delayMicroseconds(20);
-  }
-  return sum / NUM_READINGS;
-}
-
 int rawToPercent(int raw)
 {
   if (raw < 15)

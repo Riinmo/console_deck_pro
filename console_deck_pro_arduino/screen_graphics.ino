@@ -20,7 +20,11 @@ static void drawSmallGpuIcon(U8G2 &u8g2, int x, int y)
 static void drawSmallRamIcon(U8G2 &u8g2, int x, int y)
 {
     u8g2.drawFrame(x, y, 10, 6);
-    u8g2.drawVLine(x + 5, y + 7, 2);
+    // RAM "teeth" (pins)
+    u8g2.drawVLine(x + 1, y + 6, 2);
+    u8g2.drawVLine(x + 3, y + 6, 2);
+    u8g2.drawVLine(x + 5, y + 6, 2);
+    u8g2.drawVLine(x + 7, y + 6, 2);
 }
 
 static void drawSmallTempIcon(U8G2 &u8g2, int x, int y)
@@ -41,7 +45,7 @@ void drawStatsLayout(U8G2 &u8g2, int cpu, int gpu, int ram, int tempC, int tempG
     u8g2.setFont(u8g2_font_6x10_tr);
 
     const int H = 26;
-    int y = 22;
+    int y = 28;  // shifted down for better vertical centering
     int x_bar = 42;
     int x_val = 98;
 
