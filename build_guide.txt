@@ -1,12 +1,39 @@
 
 ################################################################
-########################### BUILD GUIDE ######################## 
+########################### BUILD GUIDE ########################
 ################################################################
 
-1. pyinstaller your_program.py --noconsole (or filename ext .pyw)
+OPTION A: Inno Setup ready-to-use package (no manual setup for user)
 
-2. flutter build windows
+1) Build backend EXE
+   From project root:
+   py -m PyInstaller --noconfirm --onefile --noconsole --name console_deck_pro console_deck_pro.py
 
-3. Inno Setup (TODO CMD)
+   Expected output:
+   dist\console_deck_pro.exe
 
-4. ...... 
+2) Build Flutter Windows app
+   From UI folder:
+   flutter build windows
+
+   Expected output:
+   UI\build\windows\x64\runner\Release\console_deck_ui.exe
+
+3) Build installer with Inno Setup
+   Compile:
+   UI\setup.iss
+
+   Note:
+   If you want branded app icon in shortcuts/exe, add:
+   UI\windows\runner\resources\app_icon.ico
+   and enable icon resource in:
+   UI\windows\runner\Runner.rc
+
+Installer behavior:
+- Installs UI app files
+- Installs backend EXE in {app}\backend
+- Removes old "ConsoleDeckProBackend" service if found (migration from previous installers)
+- Does NOT auto-start backend (manual launch only)
+
+Uninstall behavior:
+- Removes app files

@@ -311,6 +311,12 @@ def execute_action(action_def, absolute_value=None, multiplier=1):
                     print(f"     Brightness: {current} -> {new_val} (relative)")
             except Exception as e:
                 print(f"     [ERROR] Set Brightness failed: {e}")
+        elif action_type == 'play_audio':
+            file_path = str(value or "")
+            if file_path:
+                special_module_manager.play_one_shot(file_path)
+                if ENABLE_ACTION_LOG:
+                    print(f"     Play Audio: {file_path}")
         else:
             print(f"     [WARNING] Unknown action type: {action_type}")
     except Exception as e:

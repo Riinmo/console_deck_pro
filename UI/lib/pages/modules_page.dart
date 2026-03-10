@@ -459,55 +459,6 @@ class _ModulesPageState extends State<ModulesPage> {
         ),
       ],
     ),
-    ModuleConfig(
-      id: 'modeling',
-      nameKey: AppKeys.moduleModeling,
-      imagePath: 'assets/images/modeling_module.png',
-      hotspots: [
-        // 1 Circular (TR), 2 Rect (TL), 1 Sq (Center), 1 Rect (BR) - Centered
-        ModuleHotspot(
-          id: 'modeling_rect_1',
-          left: 117,
-          top: 125,
-          width: 60,
-          height: 130,
-          tooltipKey: 'Rect 1',
-        ),
-        ModuleHotspot(
-          id: 'modeling_rect_2',
-          left: 180,
-          top: 125,
-          width: 60,
-          height: 65,
-          tooltipKey: 'Rect 2',
-        ),
-        ModuleHotspot(
-          id: 'modeling_circle',
-          left: 258,
-          top: 106,
-          width: 110,
-          height: 110,
-          isRound: true,
-          tooltipKey: 'Circle',
-        ),
-        ModuleHotspot(
-          id: 'modeling_square',
-          left: 200,
-          top: 215,
-          width: 70,
-          height: 70,
-          tooltipKey: 'Square',
-        ),
-        ModuleHotspot(
-          id: 'modeling_wheel',
-          left: 320,
-          top: 270,
-          width: 50,
-          height: 90,
-          tooltipKey: 'Wheel',
-        ),
-      ],
-    ),
   ];
 
   @override
@@ -1170,21 +1121,11 @@ class _ModulesPageState extends State<ModulesPage> {
 
     // Determine available types based on module
     final bool isAnalog = module.id == 'sliders' || module.id == 'knobs';
-    final bool isModelingRestricted =
-        module.id == 'modeling' &&
-        [
-          'modeling_rect_1',
-          'modeling_rect_2',
-          'modeling_circle',
-        ].contains(hotspot.id);
-
     final List<String> availableTypes;
-    if (isModelingRestricted) {
-      availableTypes = ['None', 'Hotkey'];
-    } else if (isAnalog) {
+    if (isAnalog) {
       availableTypes = ['None', 'Volume', 'Brightness'];
     } else {
-      availableTypes = ['None', 'Link', 'App', 'Hotkey'];
+      availableTypes = ['None', 'Link', 'App', 'Hotkey', 'Audio'];
     }
 
     // Ensure selectedType is valid for this specific hotspot
@@ -1201,7 +1142,13 @@ class _ModulesPageState extends State<ModulesPage> {
     final TextEditingController hotkeyController = TextEditingController(
       text: selectedType == 'Hotkey' ? currentConfig['value'] : '',
     );
+    final TextEditingController audioController = TextEditingController(
+      text: selectedType == 'Audio' ? currentConfig['value'] : '',
+    );
     String? selectedAppPath = selectedType == 'App'
+        ? currentConfig['value']
+        : null;
+    String? selectedAudioPath = selectedType == 'Audio'
         ? currentConfig['value']
         : null;
 
@@ -1257,6 +1204,8 @@ class _ModulesPageState extends State<ModulesPage> {
                             currentLocale,
                             AppKeys.actionBrightness,
                           );
+                        } else if (value == 'Audio') {
+                          label = 'Audio';
                         }
 
                         return DropdownMenuItem<String>(
@@ -1340,6 +1289,43 @@ class _ModulesPageState extends State<ModulesPage> {
                             AppKeys.clear,
                           ),
                         ),
+                      if (selectedType == 'Audio')
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: audioController,
+                                readOnly: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'Audio file',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.file_open),
+                              onPressed: () async {
+                                FilePickerResult? result = await FilePicker
+                                    .platform
+                                    .pickFiles(
+                                      type: FileType.custom,
+                                      allowedExtensions: [
+                                        'wav',
+                                        'mp3',
+                                        'ogg',
+                                        'flac',
+                                        'm4a',
+                                      ],
+                                    );
+
+                                if (result != null) {
+                                  selectedAudioPath = result.files.single.path;
+                                  audioController.text = selectedAudioPath!;
+                                }
+                              },
+                            ),
+                          ],
+                        ),
                     ],
                   ],
                   ),
@@ -1357,6 +1343,7 @@ class _ModulesPageState extends State<ModulesPage> {
                       if (selectedType == 'Link') value = linkController.text;
                       if (selectedType == 'App') value = appController.text;
                       if (selectedType == 'Hotkey') value = hotkeyController.text;
+                      if (selectedType == 'Audio') value = audioController.text;
 
                       setState(() {
                         if (_moduleConfigs[moduleIndex] == null) {

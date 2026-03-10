@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:async';
 
 import '../services/config_service.dart';
 import '../theme_state.dart';
@@ -21,11 +22,22 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _selectedPort;
   bool _isLoadingPorts = true;
   String? _portError;
+  Timer? _portsRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadCurrentConfig().then((_) => _loadSerialPorts());
+    _portsRefreshTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _loadSerialPorts(silent: true),
+    );
+  }
+
+  @override
+  void dispose() {
+    _portsRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadCurrentConfig() async {
@@ -41,7 +53,12 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _loadSerialPorts() async {
+  Future<void> _loadSerialPorts({bool silent = false}) async {
+    if (!silent && mounted) {
+      setState(() {
+        _isLoadingPorts = true;
+      });
+    }
     try {
       // Short timeout to fail fast if backend is not running
       final response = await http
@@ -83,7 +100,7 @@ class _SettingsPageState extends State<SettingsPage> {
         });
       }
     } finally {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           _isLoadingPorts = false;
         });

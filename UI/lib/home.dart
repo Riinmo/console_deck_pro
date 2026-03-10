@@ -101,6 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _status = newStatus;
       });
     }
+
   }
 
   @override

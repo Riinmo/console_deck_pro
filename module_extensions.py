@@ -3,7 +3,11 @@ import os
 import platform
 import subprocess
 import threading
+import time
 import wave
+import shutil
+import hashlib
+from pathlib import Path
 from array import array
 
 try:
@@ -11,6 +15,13 @@ try:
     HAS_PYGAME = True
 except Exception:
     HAS_PYGAME = False
+
+try:
+    # 1.2.2 is the stable non-GStreamer path on Windows.
+    from playsound import playsound
+    HAS_PLAYSOUND = True
+except Exception:
+    HAS_PLAYSOUND = False
 
 try:
     import winsound  # Windows fallback for default notes when pygame is unavailable
@@ -118,11 +129,17 @@ class SpecialModuleManager:
 
         self.notes_dir = os.path.join(self.app_dir, "notes_cache")
         os.makedirs(self.notes_dir, exist_ok=True)
+        self.one_shot_dir = os.path.join(self.app_dir, "one_shot_cache")
+        os.makedirs(self.one_shot_dir, exist_ok=True)
+        self._cleanup_one_shot_cache(max_age_days=14)
 
         if self.pygame_available:
             self._init_pygame_players()
         else:
-            self._log("[INFO] pygame not available. Special audio playback disabled.")
+            if HAS_PLAYSOUND or HAS_WINSOUND:
+                self._log("[INFO] pygame not available. One-shot audio fallback is active.")
+            else:
+                self._log("[INFO] pygame not available. Special audio playback disabled.")
 
     def _log(self, msg):
         print(msg)
@@ -142,6 +159,31 @@ class SpecialModuleManager:
             self.right_channel = None
             self.piano_channel = None
             self._log(f"[WARNING] pygame init failed: {exc}")
+
+    def _cleanup_one_shot_cache(self, max_age_days=14):
+        try:
+            cutoff = time.time() - (max_age_days * 24 * 3600)
+            for name in os.listdir(self.one_shot_dir):
+                path = os.path.join(self.one_shot_dir, name)
+                try:
+                    if os.path.isfile(path) and os.path.getmtime(path) < cutoff:
+                        os.remove(path)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _cache_one_shot_file(self, source_path):
+        src = Path(source_path)
+        if not src.is_file():
+            return ""
+        ext = src.suffix.lower() or ".bin"
+        key = f"{str(src.resolve())}|{src.stat().st_size}|{int(src.stat().st_mtime)}"
+        digest = hashlib.sha1(key.encode("utf-8", errors="ignore")).hexdigest()
+        target = Path(self.one_shot_dir) / f"{digest}{ext}"
+        if not target.exists():
+            shutil.copy2(str(src), str(target))
+        return str(target)
 
     def update_config(self, config):
         with self.lock:
@@ -236,6 +278,66 @@ class SpecialModuleManager:
 
             if should_play and key_index >= 0:
                 self._play_piano_index(key_index)
+
+    def play_one_shot(self, file_path):
+        """
+        Play a generic one-shot audio file (used by standard button mappings).
+        Uses the selected file directly and never falls back to synthetic beeps.
+        """
+        with self.lock:
+            if not file_path:
+                return
+            path = str(file_path)
+            if not os.path.isfile(path):
+                if self.action_log:
+                    self._log(f"[AUDIO] File not found: {path}")
+                return
+
+            cached_path = self._cache_one_shot_file(path)
+            if not cached_path:
+                return
+
+            # Try pygame.music first (broader codec support, e.g. mp3/m4a).
+            if self.pygame_available:
+                try:
+                    pygame.mixer.music.load(cached_path)
+                    pygame.mixer.music.play()
+                    return
+                except Exception:
+                    pass
+
+                # Fallback to Sound + dedicated channel.
+                if self.piano_channel is not None:
+                    try:
+                        self.piano_sound = pygame.mixer.Sound(cached_path)
+                        self.piano_channel.play(self.piano_sound)
+                        return
+                    except Exception:
+                        pass
+
+            # Last resort 1: playsound (often works with OS codecs on Windows).
+            if HAS_PLAYSOUND:
+                try:
+                    threading.Thread(
+                        target=playsound,
+                        args=(cached_path,),
+                        kwargs={"block": False},
+                        daemon=True,
+                    ).start()
+                    return
+                except Exception:
+                    pass
+
+            # Last resort 2: native WAV fallback on Windows.
+            if HAS_WINSOUND and cached_path.lower().endswith(".wav"):
+                try:
+                    winsound.PlaySound(cached_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                    return
+                except Exception:
+                    pass
+
+            # Last resort 3: play actual file via OS player (wav on macOS/Linux fallback).
+            _play_wav_fallback(cached_path)
 
     def close(self):
         with self.lock:

@@ -9,12 +9,13 @@ AppVersion=1.0.0
 AppPublisher=Luca Di Lorenzo
 DefaultDirName={autopf}\Console Deck PRO
 DisableProgramGroupPage=yes
-; Remove the following line to run in administrative install mode (install for all users.)
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 OutputBaseFilename=ConsoleDeckPro_Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+ArchitecturesInstallIn64BitMode=x64
+UninstallDisplayIcon={app}\console_deck_ui.exe
 SetupIconFile=windows\runner\resources\app_icon.ico
 
 [Languages]
@@ -32,10 +33,14 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; IMPORTANT: Ensure you have run "flutter build windows" before compiling this script
 Source: "build\windows\x64\runner\Release\console_deck_ui.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb"
+; Backend executable built with PyInstaller:
+; py -m PyInstaller --noconfirm --onefile --noconsole --name console_deck_pro ..\console_deck_pro.py
+Source: "..\dist\console_deck_pro.exe"; DestDir: "{app}\backend"; DestName: "console_deck_pro.exe"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Console Deck PRO"; Filename: "{app}\console_deck_ui.exe"
 Name: "{autodesktop}\Console Deck PRO"; Filename: "{app}\console_deck_ui.exe"; Tasks: desktopicon
 
 [Run]
+Filename: "{cmd}"; Parameters: "/C sc stop ""ConsoleDeckProBackend"" >nul 2>&1 & sc delete ""ConsoleDeckProBackend"" >nul 2>&1"; Flags: runhidden waituntilterminated
 Filename: "{app}\console_deck_ui.exe"; Description: "{cm:LaunchProgram,Console Deck PRO}"; Flags: nowait postinstall skipifsilent

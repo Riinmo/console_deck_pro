@@ -156,6 +156,10 @@ class ConfigService {
           entry['action'] = 'hotkey';
           entry['value'] = _parseHotkey(value);
           break;
+        case 'Audio':
+          entry['action'] = 'play_audio';
+          entry['value'] = value;
+          break;
         case 'Volume':
           entry['action'] = 'set_volume';
           break;
@@ -368,6 +372,9 @@ class ConfigService {
       } else if (val is String) {
         value = val;
       }
+    } else if (action == 'play_audio') {
+      type = 'Audio';
+      value = val?.toString() ?? '';
     } else if (action == 'set_volume') {
       type = 'Volume';
     } else if (action == 'set_brightness') {

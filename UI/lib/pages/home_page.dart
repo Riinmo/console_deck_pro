@@ -63,8 +63,12 @@ class _HomePageState extends State<HomePage> {
     final TextEditingController hotkeyController = TextEditingController(
       text: selectedType == 'Hotkey' ? currentValue : '',
     );
+    final TextEditingController audioController = TextEditingController(
+      text: selectedType == 'Audio' ? currentValue : '',
+    );
 
     String? selectedAppPath = selectedType == 'App' ? currentValue : null;
+    String? selectedAudioPath = selectedType == 'Audio' ? currentValue : null;
 
     await showDialog(
       context: context,
@@ -82,7 +86,7 @@ class _HomePageState extends State<HomePage> {
                     DropdownButton<String>(
                       value: selectedType,
                       isExpanded: true,
-                      items: <String>['None', 'Link', 'App', 'Hotkey']
+                      items: <String>['None', 'Link', 'App', 'Hotkey', 'Audio']
                           .map<DropdownMenuItem<String>>((String value) {
                             String label = value;
                             if (value == 'None') {
@@ -184,6 +188,42 @@ class _HomePageState extends State<HomePage> {
                           AppKeys.clear,
                         ),
                       ),
+                    if (selectedType == 'Audio')
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: audioController,
+                              readOnly: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Audio file',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.file_open),
+                            onPressed: () async {
+                              FilePickerResult? result = await FilePicker
+                                  .platform
+                                  .pickFiles(
+                                    type: FileType.custom,
+                                    allowedExtensions: [
+                                      'wav',
+                                      'mp3',
+                                      'ogg',
+                                      'flac',
+                                      'm4a',
+                                    ],
+                                  );
+                              if (result != null) {
+                                selectedAudioPath = result.files.single.path;
+                                audioController.text = selectedAudioPath!;
+                              }
+                            },
+                          ),
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -201,6 +241,7 @@ class _HomePageState extends State<HomePage> {
                     if (selectedType == 'Link') value = linkController.text;
                     if (selectedType == 'App') value = appController.text;
                     if (selectedType == 'Hotkey') value = hotkeyController.text;
+                    if (selectedType == 'Audio') value = audioController.text;
 
                     setState(() {
                       _buttonConfigs[index] = {
