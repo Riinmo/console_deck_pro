@@ -31,10 +31,11 @@ OPTION A: Inno Setup ready-to-use package (no manual setup for user)
 
 Installer behavior:
 - Installs UI app files
-- Installs backend EXE in {app}\backend
 - Copies Python backend files in {app} for manual launch:
   console_deck_pro.py, module_extensions.py, requirements.txt, config.example.json
 - Does NOT auto-start backend (manual launch only)
+- Cleans up legacy files/folders from old installers:
+  {app}\backend, {app}\tools, {app}\console_deck_pro.exe
 
 Uninstall behavior:
 - Removes app files
