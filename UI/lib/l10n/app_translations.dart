@@ -104,6 +104,7 @@ class AppKeys {
   static const String pianoPickAudio = 'piano_pick_audio';
   static const String pianoPlaySample = 'piano_play_sample';
   static const String audioFileMissing = 'audio_file_missing';
+  static const String skinCreatorLockedTooltip = 'skin_creator_locked_tooltip';
 }
 
 class AppStrings {
@@ -211,6 +212,8 @@ class AppStrings {
       AppKeys.pianoPlaySample: 'Play sample',
       AppKeys.audioFileMissing:
           'Audio file not found. Playing default note instead.',
+      AppKeys.skinCreatorLockedTooltip:
+          'Skin Creator is currently locked. This is a stretch-goal feature that can be enabled remotely.',
     },
     'it': {
       AppKeys.home: 'Home',
@@ -317,6 +320,8 @@ class AppStrings {
       AppKeys.pianoPlaySample: 'Riproduci campione',
       AppKeys.audioFileMissing:
           'File audio non trovato. Riproduco la nota predefinita.',
+      AppKeys.skinCreatorLockedTooltip:
+          'Skin Creator bloccato: feature stretch goal attivabile da configurazione remota.',
     },
     'es': {
       AppKeys.home: 'Inicio',

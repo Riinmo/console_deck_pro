@@ -5,6 +5,7 @@ import 'pages/home_page.dart';
 import 'pages/modules_page.dart';
 import 'pages/settings_page.dart';
 import 'services/config_service.dart';
+import 'services/feature_flags_service.dart';
 import 'package:http/http.dart' as http;
 import 'dart:async';
 import 'dart:convert';
@@ -23,6 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
   BackendStatus _status = BackendStatus.backendDown;
   Timer? _statusTimer;
   bool _isCheckingBackend = false;
+  bool _skinCreatorEnabled = false;
   late final List<Widget> _persistentPages;
 
   @override
@@ -33,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
       SkinCreatorPage(),
       SettingsPage(),
     ];
+    _loadFeatureFlags();
     _checkBackendStatus();
     _statusTimer = Timer.periodic(
       const Duration(seconds: 3),
@@ -47,12 +50,59 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _navigateTo(int index) {
+    if (index == 2 && !_skinCreatorEnabled) {
+      return;
+    }
     if (_selectedIndex == index) {
       return;
     }
     setState(() {
       _selectedIndex = index;
     });
+  }
+
+  Future<void> _loadFeatureFlags() async {
+    final enabled = await FeatureFlagsService.isSkinCreatorEnabled();
+    if (!mounted) return;
+    setState(() {
+      _skinCreatorEnabled = enabled;
+      if (!_skinCreatorEnabled && _selectedIndex == 2) {
+        _selectedIndex = 0;
+      }
+    });
+  }
+
+  Widget _buildSkinCreatorIcon({required bool selected, required Locale locale}) {
+    final iconData = selected ? Icons.add_box_rounded : Icons.add_box;
+    if (_skinCreatorEnabled) {
+      return Icon(iconData);
+    }
+    return Tooltip(
+      message: AppStrings.get(locale, AppKeys.skinCreatorLockedTooltip),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(iconData, color: Colors.grey),
+          Positioned(
+            top: -2,
+            right: -6,
+            child: Container(
+              width: 14,
+              height: 14,
+              decoration: const BoxDecoration(
+                color: Colors.amber,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.lock,
+                size: 9,
+                color: Colors.black,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _checkBackendStatus() async {
@@ -129,8 +179,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 label: Text(AppStrings.get(currentLocale, AppKeys.modules)),
               ),
               NavigationRailDestination(
-                icon: const Icon(Icons.add_box),
-                selectedIcon: const Icon(Icons.add_box_rounded),
+                icon: _buildSkinCreatorIcon(
+                  selected: false,
+                  locale: currentLocale,
+                ),
+                selectedIcon: _buildSkinCreatorIcon(
+                  selected: true,
+                  locale: currentLocale,
+                ),
                 label: Text(AppStrings.get(currentLocale, AppKeys.skinCreator)),
               ),
               NavigationRailDestination(

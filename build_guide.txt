@@ -32,7 +32,8 @@ OPTION A: Inno Setup ready-to-use package (no manual setup for user)
 Installer behavior:
 - Installs UI app files
 - Installs backend EXE in {app}\backend
-- Removes old "ConsoleDeckProBackend" service if found (migration from previous installers)
+- Copies Python backend files in {app} for manual launch:
+  console_deck_pro.py, module_extensions.py, requirements.txt, config.example.json
 - Does NOT auto-start backend (manual launch only)
 
 Uninstall behavior:

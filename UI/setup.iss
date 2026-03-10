@@ -36,11 +36,15 @@ Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignorever
 ; Backend executable built with PyInstaller:
 ; py -m PyInstaller --noconfirm --onefile --noconsole --name console_deck_pro ..\console_deck_pro.py
 Source: "..\dist\console_deck_pro.exe"; DestDir: "{app}\backend"; DestName: "console_deck_pro.exe"; Flags: ignoreversion
+; Python backend source files for manual launch from terminal.
+Source: "..\console_deck_pro.py"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\module_extensions.py"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\requirements.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\config.example.json"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Console Deck PRO"; Filename: "{app}\console_deck_ui.exe"
 Name: "{autodesktop}\Console Deck PRO"; Filename: "{app}\console_deck_ui.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{cmd}"; Parameters: "/C sc stop ""ConsoleDeckProBackend"" >nul 2>&1 & sc delete ""ConsoleDeckProBackend"" >nul 2>&1"; Flags: runhidden waituntilterminated
 Filename: "{app}\console_deck_ui.exe"; Description: "{cm:LaunchProgram,Console Deck PRO}"; Flags: nowait postinstall skipifsilent
