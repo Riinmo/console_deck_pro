@@ -20,4 +20,14 @@ config.json
 # Logs
 *.log
 
+# Build artifacts
+build/
+dist/
+UI/build/
+UI/Output/
+*.exe
+*.pdb
+
+# Claude Code
+.claude/
 
