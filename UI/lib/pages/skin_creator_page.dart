@@ -19,8 +19,8 @@ class SkinCreatorPage extends StatefulWidget {
 class _SkinCreatorPageState extends State<SkinCreatorPage> {
   String? _selectedFilePath;
   bool _isUploading = false;
-  static const String _apiUrl = 'REDACTED_URL';
-  static const String _apiKey = 'REDACTED';
+  static const String _apiUrl = String.fromEnvironment('SKIN_API_URL', defaultValue: '');
+  static const String _apiKey = String.fromEnvironment('SKIN_API_KEY', defaultValue: '');
 
   Future<void> _pickFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
