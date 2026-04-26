@@ -8,3 +8,4 @@ psutil
 GPUtil
 pygame; python_version < "3.14"
 playsound==1.2.2
+requests

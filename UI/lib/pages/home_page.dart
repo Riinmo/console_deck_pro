@@ -1,6 +1,8 @@
 import 'package:console_deck_ui/home.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../l10n/app_translations.dart';
 import '../services/config_service.dart';
 import '../widgets/hotkey_input_field.dart';
@@ -49,6 +51,147 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  List<String> _servicesForDomain(String domain) {
+    switch (domain) {
+      case 'scene':
+        return ['turn_on'];
+      case 'script':
+        return ['turn_on'];
+      case 'automation':
+        return ['trigger', 'turn_on', 'turn_off'];
+      case 'media_player':
+        return ['media_play_pause', 'media_stop', 'turn_on', 'turn_off'];
+      default:
+        return ['turn_on', 'turn_off', 'toggle'];
+    }
+  }
+
+  Future<Map<String, String>?> _showEntityPickerDialog(
+      String host, String token) async {
+    List<Map<String, String>> entities = [];
+    List<Map<String, String>> filtered = [];
+    String? error;
+    bool loading = true;
+    bool fetched = false;
+
+    return showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          if (!fetched) {
+            fetched = true;
+            () async {
+              try {
+                final cleanHost =
+                    host.replaceAll(RegExp(r'/+$'), '');
+                final resp = await http
+                    .get(Uri.parse('$cleanHost/api/states'),
+                        headers: {'Authorization': 'Bearer $token'})
+                    .timeout(const Duration(seconds: 8));
+                if (resp.statusCode == 200) {
+                  final data = jsonDecode(resp.body) as List;
+                  final list = data.map<Map<String, String>>((e) {
+                    final eid = (e['entity_id'] ?? '').toString();
+                    return {
+                      'entity_id': eid,
+                      'friendly_name':
+                          (e['attributes']?['friendly_name'] ?? eid)
+                              .toString(),
+                      'domain':
+                          eid.contains('.') ? eid.split('.')[0] : eid,
+                    };
+                  }).toList()
+                    ..sort((a, b) =>
+                        a['entity_id']!.compareTo(b['entity_id']!));
+                  setSt(() {
+                    entities = list;
+                    filtered = list;
+                    loading = false;
+                  });
+                } else {
+                  setSt(() {
+                    error = 'HTTP ${resp.statusCode}';
+                    loading = false;
+                  });
+                }
+              } catch (e) {
+                setSt(() {
+                  error = e.toString();
+                  loading = false;
+                });
+              }
+            }();
+          }
+
+          return AlertDialog(
+            title: const Text('Select Entity'),
+            contentPadding:
+                const EdgeInsets.fromLTRB(24, 20, 24, 0),
+            content: SizedBox(
+              width: 400,
+              height: 480,
+              child: loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : error != null
+                      ? Center(
+                          child: Text('Error: $error',
+                              style:
+                                  const TextStyle(color: Colors.red)))
+                      : Column(children: [
+                          TextField(
+                            decoration: const InputDecoration(
+                              hintText: 'Search...',
+                              prefixIcon: Icon(Icons.search),
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                              contentPadding:
+                                  EdgeInsets.symmetric(vertical: 10),
+                            ),
+                            onChanged: (v) {
+                              final q = v.toLowerCase();
+                              setSt(() {
+                                filtered = entities
+                                    .where((e) =>
+                                        e['entity_id']!.contains(q) ||
+                                        e['friendly_name']!
+                                            .toLowerCase()
+                                            .contains(q))
+                                    .toList();
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (_, i) {
+                                final e = filtered[i];
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(e['friendly_name']!),
+                                  subtitle: Text(e['entity_id']!,
+                                      style: const TextStyle(
+                                          fontSize: 11)),
+                                  onTap: () =>
+                                      Navigator.of(ctx).pop(e),
+                                );
+                              },
+                            ),
+                          ),
+                        ]),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(null),
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _showActionDialog(int index) async {
     final currentLocale = Localizations.localeOf(context);
     String selectedType = _buttonConfigs[index]?['type'] ?? 'None';
@@ -70,6 +213,14 @@ class _HomePageState extends State<HomePage> {
     String? selectedAppPath = selectedType == 'App' ? currentValue : null;
     String? selectedAudioPath = selectedType == 'Audio' ? currentValue : null;
 
+    // HA state
+    final haParts = (selectedType == 'HomeAssistant' && currentValue != null)
+        ? currentValue.split('|')
+        : <String>[];
+    String? haEntityId = haParts.isNotEmpty ? haParts[0] : null;
+    String haService = haParts.length > 1 ? haParts[1] : 'turn_on';
+    String? haError;
+
     await showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -86,31 +237,20 @@ class _HomePageState extends State<HomePage> {
                     DropdownButton<String>(
                       value: selectedType,
                       isExpanded: true,
-                      items: <String>['None', 'Link', 'App', 'Hotkey', 'Audio']
+                      items: <String>['None', 'Link', 'App', 'Hotkey', 'Audio', 'HomeAssistant']
                           .map<DropdownMenuItem<String>>((String value) {
                             String label = value;
                             if (value == 'None') {
-                              label = AppStrings.get(
-                                currentLocale,
-                                AppKeys.typeNone,
-                              );
+                              label = AppStrings.get(currentLocale, AppKeys.typeNone);
                             } else if (value == 'Link') {
-                              label = AppStrings.get(
-                                currentLocale,
-                                AppKeys.typeLink,
-                              );
+                              label = AppStrings.get(currentLocale, AppKeys.typeLink);
                             } else if (value == 'App') {
-                              label = AppStrings.get(
-                                currentLocale,
-                                AppKeys.typeApp,
-                              );
+                              label = AppStrings.get(currentLocale, AppKeys.typeApp);
                             } else if (value == 'Hotkey') {
-                              label = AppStrings.get(
-                                currentLocale,
-                                AppKeys.typeHotkey,
-                              );
+                              label = AppStrings.get(currentLocale, AppKeys.typeHotkey);
+                            } else if (value == 'HomeAssistant') {
+                              label = 'Home Assistant';
                             }
-
                             return DropdownMenuItem<String>(
                               value: value,
                               child: Text(label),
@@ -224,6 +364,76 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ],
                       ),
+                    if (selectedType == 'HomeAssistant')
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  haEntityId ?? 'No entity selected',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: haEntityId == null
+                                        ? Theme.of(context).hintColor
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () async {
+                                  final cfg = await ConfigService.loadHaConfig();
+                                  final host = cfg['host'] ?? '';
+                                  final token = cfg['token'] ?? '';
+                                  if (host.isEmpty || token.isEmpty) {
+                                    setDialogState(() {
+                                      haError = 'Configure Home Assistant in Settings first';
+                                    });
+                                    return;
+                                  }
+                                  setDialogState(() { haError = null; });
+                                  final picked = await _showEntityPickerDialog(host, token);
+                                  if (picked != null) {
+                                    final domain = picked['domain'] ?? '';
+                                    setDialogState(() {
+                                      haEntityId = picked['entity_id'];
+                                      haService = _servicesForDomain(domain).first;
+                                      haError = null;
+                                    });
+                                  }
+                                },
+                                child: const Text('Select entity'),
+                              ),
+                            ],
+                          ),
+                          if (haError != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(haError!,
+                                  style: TextStyle(
+                                      color: Theme.of(context).colorScheme.error,
+                                      fontSize: 12)),
+                            ),
+                          if (haEntityId != null) ...[
+                            const SizedBox(height: 8),
+                            DropdownButton<String>(
+                              value: haService,
+                              isExpanded: true,
+                              items: _servicesForDomain(
+                                haEntityId!.contains('.')
+                                    ? haEntityId!.split('.')[0]
+                                    : '',
+                              )
+                                  .map((s) => DropdownMenuItem(
+                                      value: s, child: Text(s)))
+                                  .toList(),
+                              onChanged: (v) =>
+                                  setDialogState(() => haService = v ?? haService),
+                            ),
+                          ],
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -237,6 +447,24 @@ class _HomePageState extends State<HomePage> {
                 TextButton(
                   child: Text(AppStrings.get(currentLocale, AppKeys.save)),
                   onPressed: () async {
+                    if (selectedType == 'HomeAssistant') {
+                      if (haEntityId != null && haEntityId!.isNotEmpty) {
+                        setState(() {
+                          _buttonConfigs[index] = {
+                            'type': 'HomeAssistant',
+                            'value': '$haEntityId|$haService',
+                          };
+                        });
+                        await ConfigService.saveHaMapping(
+                          'btn_${index + 1}',
+                          haEntityId!,
+                          haService,
+                        );
+                      }
+                      if (context.mounted) Navigator.of(context).pop();
+                      return;
+                    }
+
                     String value = '';
                     if (selectedType == 'Link') value = linkController.text;
                     if (selectedType == 'App') value = appController.text;
@@ -256,7 +484,7 @@ class _HomePageState extends State<HomePage> {
                       value,
                     );
 
-                    if (mounted) Navigator.of(context).pop();
+                    if (context.mounted) Navigator.of(context).pop();
                   },
                 ),
               ],
@@ -369,6 +597,11 @@ class _HomePageState extends State<HomePage> {
                                                 currentLocale,
                                                 AppKeys.typeHotkey,
                                               );
+                                            } else if (type == 'HomeAssistant') {
+                                              final v = _buttonConfigs[index]!['value'] ?? '';
+                                              final eid = v.contains('|') ? v.split('|')[0] : v;
+                                              final name = eid.contains('.') ? eid.split('.').last : eid;
+                                              return 'HA: $name';
                                             }
                                             return type;
                                           }(),

@@ -24,6 +24,12 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _portError;
   Timer? _portsRefreshTimer;
 
+  final TextEditingController _haHostController = TextEditingController();
+  final TextEditingController _haTokenController = TextEditingController();
+  bool _haTokenVisible = false;
+  bool _haTestLoading = false;
+  bool? _haTestOk;
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +43,8 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _portsRefreshTimer?.cancel();
+    _haHostController.dispose();
+    _haTokenController.dispose();
     super.dispose();
   }
 
@@ -45,12 +53,43 @@ class _SettingsPageState extends State<SettingsPage> {
     if (mounted) {
       final serialConfig = config['serial'] as Map<String, dynamic>? ?? {};
       final loadedPort = serialConfig['port'];
+      final haCfg = await ConfigService.loadHaConfig();
 
       setState(() {
         _selectedPort =
             loadedPort is String && loadedPort.isNotEmpty ? loadedPort : null;
+        _haHostController.text = haCfg['host'] ?? '';
+        _haTokenController.text = haCfg['token'] ?? '';
       });
     }
+  }
+
+  Future<void> _testHaConnection() async {
+    setState(() { _haTestLoading = true; _haTestOk = null; });
+    try {
+      final host = _haHostController.text.trim().replaceAll(RegExp(r'/+$'), '');
+      final token = _haTokenController.text.trim();
+      final resp = await http.get(
+        Uri.parse('$host/api/'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 5));
+      if (mounted) setState(() { _haTestOk = resp.statusCode == 200; });
+    } catch (_) {
+      if (mounted) setState(() { _haTestOk = false; });
+    } finally {
+      if (mounted) setState(() { _haTestLoading = false; });
+    }
+  }
+
+  Future<void> _saveHaConfig() async {
+    await ConfigService.saveHaConfig(
+      _haHostController.text.trim(),
+      _haTokenController.text.trim(),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Home Assistant settings saved')),
+    );
   }
 
   Future<void> _loadSerialPorts({bool silent = false}) async {
@@ -280,6 +319,91 @@ class _SettingsPageState extends State<SettingsPage> {
                                                 }
                                               },
                                             ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Home Assistant
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(Icons.home_outlined),
+                                    SizedBox(width: 16),
+                                    Text('Home Assistant',
+                                        style: TextStyle(fontSize: 16)),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _haHostController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'URL',
+                                    hintText: 'http://192.168.1.100:8123',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: _haTokenController,
+                                  obscureText: !_haTokenVisible,
+                                  decoration: InputDecoration(
+                                    labelText: 'Long-Lived Access Token',
+                                    border: const OutlineInputBorder(),
+                                    isDense: true,
+                                    suffixIcon: IconButton(
+                                      icon: Icon(_haTokenVisible
+                                          ? Icons.visibility_off
+                                          : Icons.visibility),
+                                      onPressed: () => setState(() =>
+                                          _haTokenVisible = !_haTokenVisible),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    if (_haTestOk != null) ...[
+                                      Icon(
+                                        _haTestOk!
+                                            ? Icons.check_circle
+                                            : Icons.error,
+                                        color: _haTestOk!
+                                            ? Colors.green
+                                            : Colors.red,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    OutlinedButton(
+                                      onPressed: _haTestLoading
+                                          ? null
+                                          : _testHaConnection,
+                                      child: _haTestLoading
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2),
+                                            )
+                                          : const Text('Test'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    FilledButton(
+                                      onPressed: _saveHaConfig,
+                                      child: const Text('Save'),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),

@@ -189,6 +189,52 @@ class ConfigService {
     }
   }
 
+  static Future<void> saveHaConfig(String host, String token) async {
+    try {
+      final file = await _configFile;
+      final config = await _readConfigFile(file);
+      config['home_assistant'] = {'host': host, 'token': token};
+      await _writeConfig(file, config);
+    } catch (e) {
+      if (kDebugMode) print('Error saving HA config: $e');
+    }
+  }
+
+  static Future<Map<String, String>> loadHaConfig() async {
+    try {
+      final config = await loadConfig();
+      final ha = config['home_assistant'] as Map?;
+      if (ha != null) {
+        return {
+          'host': ha['host']?.toString() ?? '',
+          'token': ha['token']?.toString() ?? '',
+        };
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error loading HA config: $e');
+    }
+    return {'host': '', 'token': ''};
+  }
+
+  static Future<void> saveHaMapping(String key, String entityId, String service) async {
+    try {
+      final file = await _configFile;
+      final config = await _readConfigFile(file);
+      final mappings = _normalizeMappings(config);
+      final mainMappings = Map<String, dynamic>.from((mappings['main'] as Map?) ?? const {});
+      mainMappings[key] = {
+        'action': 'home_assistant',
+        'service': service,
+        'entity_id': entityId,
+      };
+      mappings['main'] = mainMappings;
+      config['mappings'] = mappings;
+      await _writeConfig(file, config);
+    } catch (e) {
+      if (kDebugMode) print('Error saving HA mapping: $e');
+    }
+  }
+
   static Future<void> saveSerialPort(String port) async {
     try {
       final file = await _configFile;
@@ -379,6 +425,11 @@ class ConfigService {
       type = 'Volume';
     } else if (action == 'set_brightness') {
       type = 'Brightness';
+    } else if (action == 'home_assistant') {
+      type = 'HomeAssistant';
+      final entityId = (entry['entity_id'] ?? '').toString();
+      final service = (entry['service'] ?? 'turn_on').toString();
+      value = '$entityId|$service';
     }
 
     return {'type': type, 'value': value};

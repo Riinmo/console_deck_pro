@@ -18,6 +18,7 @@ from threading import Thread, Event
 import uvicorn
 from serial.tools import list_ports
 from module_extensions import SpecialModuleManager
+import requests as _requests
 
 
 def _press_system_volume_key(key: str, count: int = 1):
@@ -318,6 +319,21 @@ def execute_action(action_def, absolute_value=None, multiplier=1):
                 special_module_manager.play_one_shot(file_path)
                 if ENABLE_ACTION_LOG:
                     print(f"     Play Audio: {file_path}")
+        elif action_type == 'home_assistant':
+            ha_cfg = config_data.get('home_assistant', {}) if isinstance(config_data, dict) else {}
+            host = str(ha_cfg.get('host', '')).rstrip('/')
+            token = str(ha_cfg.get('token', ''))
+            service = str(action_def.get('service', ''))
+            entity_id = str(action_def.get('entity_id', ''))
+            if not (host and token and service and entity_id):
+                print("     [WARNING] Home Assistant action: missing host, token, service, or entity_id")
+            else:
+                domain = entity_id.split('.')[0] if '.' in entity_id else entity_id
+                url = f"{host}/api/services/{domain}/{service}"
+                headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+                resp = _requests.post(url, headers=headers, json={"entity_id": entity_id}, timeout=5)
+                if ENABLE_ACTION_LOG:
+                    print(f"     HA {service} on {entity_id} → {resp.status_code}")
         else:
             print(f"     [WARNING] Unknown action type: {action_type}")
     except Exception as e:
