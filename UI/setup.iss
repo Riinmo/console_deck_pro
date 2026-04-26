@@ -1,10 +1,14 @@
+#ifndef AppVersion
+  #define AppVersion "1.0.0"
+#endif
+
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application.
 ; Do not use the same AppId value in installers for other applications.
 ; (To generate a new GUID, click Tools | Generate GUID inside the IDE.)
 AppId={{C0N50L3-D3CK-PR0-U1}}
 AppName=Console Deck PRO
-AppVersion=1.0.0
+AppVersion={#AppVersion}
 ;AppVerName=Console Deck PRO
 AppPublisher=Luca Di Lorenzo
 DefaultDirName={autopf}\Console Deck PRO
