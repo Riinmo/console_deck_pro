@@ -198,11 +198,14 @@ void drawDefaultScreen()
 {
   if (currentHomeMode == HOME_SPLASH)
   {
-      u8g2.setFont(u8g2_font_ncenB10_tr);
-      drawCenteredStr(55, "CONSOLE");
-      drawCenteredStr(75, "DECK PRO");
       u8g2.setFont(u8g2_font_6x10_tr);
-      drawCenteredStr(92, FIRMWARE_VERSION);
+      drawCenteredStr(14, "CONSOLE DECK PRO");
+      u8g2.setFont(u8g2_font_ncenB14_tr);
+      drawCenteredStr(62, timeStr);
+      u8g2.setFont(u8g2_font_ncenB10_tr);
+      drawCenteredStr(85, dateStr);
+      u8g2.setFont(u8g2_font_6x10_tr);
+      drawCenteredStr(110, FIRMWARE_VERSION);
       return;
   }
 

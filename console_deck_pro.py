@@ -1,6 +1,7 @@
 import serial
 import time
 import json
+from datetime import datetime
 import webbrowser
 import subprocess
 import pyautogui
@@ -645,7 +646,8 @@ def run_device_loop(ser):
                     cpu_freq_mhz = snap["cpu_freq_mhz"]
                     gpu_temp_c = snap["gpu_temp_c"]
 
-                    stats_msg = f"STATS:{cpu},{gpu},{ram},{cpu_freq_mhz},{gpu_temp_c}\n"
+                    now_dt = datetime.now()
+                    stats_msg = f"STATS:{cpu},{gpu},{ram},{cpu_freq_mhz},{gpu_temp_c},{now_dt.strftime('%H:%M')},{now_dt.strftime('%d/%m')}\n"
                     ser.write(stats_msg.encode("utf-8"))
                     if ENABLE_TELEMETRY_LOG:
                         gpu_str = f"{gpu}%" if gpu != -1 else "N/A"

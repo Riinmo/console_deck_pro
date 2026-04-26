@@ -230,7 +230,11 @@ void loop()
               if(token) cpuFreqMHz = atoi(token);
               token = strtok(NULL, ",");
               if(token) gpuTempC = atoi(token);
-              if (currentState == STATE_DEFAULT && currentHomeMode == HOME_PC_STATS) update = true;
+              token = strtok(NULL, ",");
+              if(token) { strncpy(timeStr, token, 5); timeStr[5] = '\0'; }
+              token = strtok(NULL, ",");
+              if(token) { strncpy(dateStr, token, 5); dateStr[5] = '\0'; }
+              if (currentState == STATE_DEFAULT && (currentHomeMode == HOME_PC_STATS || currentHomeMode == HOME_SPLASH)) update = true;
           }
           break;  // process only one line per loop
       } else {

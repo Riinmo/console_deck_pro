@@ -100,6 +100,8 @@ char serialBuf[48];
 int serialBufIdx = 0;
 
 // --- Stats (home) ---
+char timeStr[6] = "--:--";
+char dateStr[6] = "--/--";
 int cpuUsage = 45;
 int gpuUsage = 32;
 int ramUsage = 50;
