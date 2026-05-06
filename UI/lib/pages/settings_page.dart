@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
@@ -5,6 +6,7 @@ import 'dart:convert';
 import 'dart:async';
 
 import '../services/config_service.dart';
+import '../services/startup_service.dart';
 import '../theme_state.dart';
 import '../locale_state.dart';
 import '../l10n/app_translations.dart';
@@ -31,10 +33,15 @@ class _SettingsPageState extends State<SettingsPage> {
   bool? _haTestOk;
   String? _haTestMessage;
 
+  bool _startWithWindows = false;
+
   @override
   void initState() {
     super.initState();
     _loadCurrentConfig().then((_) => _loadSerialPorts());
+    StartupService.isEnabled().then((v) {
+      if (mounted) setState(() => _startWithWindows = v);
+    });
     _portsRefreshTimer = Timer.periodic(
       const Duration(seconds: 3),
       (_) => _loadSerialPorts(silent: true),
@@ -278,6 +285,39 @@ class _SettingsPageState extends State<SettingsPage> {
                             );
                           },
                         ),
+
+                        const SizedBox(height: 20),
+
+                        // Start with Windows (Windows only)
+                        if (Platform.isWindows)
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.power_settings_new),
+                                  const SizedBox(width: 16),
+                                  Text(AppStrings.get(
+                                    currentLocale,
+                                    AppKeys.startWithWindows,
+                                  )),
+                                  const Spacer(),
+                                  Switch(
+                                    value: _startWithWindows,
+                                    onChanged: (val) async {
+                                      final ok = await StartupService.setEnabled(val);
+                                      if (ok && mounted) {
+                                        setState(() => _startWithWindows = val);
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
 
                         const SizedBox(height: 20),
 

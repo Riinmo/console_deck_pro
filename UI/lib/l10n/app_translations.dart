@@ -77,6 +77,7 @@ class AppKeys {
   static const String errorPrefix = 'error_prefix';
   static const String clear = 'clear';
   static const String skinCreatorLockedTooltip = 'skin_creator_locked_tooltip';
+  static const String startWithWindows = 'settings.startWithWindows';
 }
 
 class AppStrings {
@@ -156,6 +157,7 @@ class AppStrings {
       AppKeys.clear: 'Clear',
       AppKeys.skinCreatorLockedTooltip:
           'Skin Creator is currently locked. This is a stretch-goal feature that can be enabled remotely.',
+      AppKeys.startWithWindows: 'Start with Windows',
     },
     'it': {
       AppKeys.home: 'Home',
@@ -234,6 +236,7 @@ class AppStrings {
       AppKeys.clear: 'Pulisci',
       AppKeys.skinCreatorLockedTooltip:
           'Skin Creator bloccato: feature stretch goal attivabile da configurazione remota.',
+      AppKeys.startWithWindows: 'Avvia con Windows',
     },
     'es': {
       AppKeys.home: 'Inicio',
@@ -312,6 +315,7 @@ class AppStrings {
       AppKeys.clear: 'Limpiar',
       AppKeys.skinCreatorLockedTooltip:
           'Skin Creator bloqueado: función stretch goal activable de forma remota.',
+      AppKeys.startWithWindows: 'Iniciar con Windows',
     },
     'fr': {
       AppKeys.home: 'Accueil',
@@ -392,6 +396,7 @@ class AppStrings {
       AppKeys.clear: 'Effacer',
       AppKeys.skinCreatorLockedTooltip:
           'Skin Creator verrouillé : fonctionnalité stretch goal activable à distance.',
+      AppKeys.startWithWindows: 'Au démarrage de Windows',
     },
     'de': {
       AppKeys.home: 'Startseite',
@@ -470,6 +475,7 @@ class AppStrings {
       AppKeys.clear: 'Löschen',
       AppKeys.skinCreatorLockedTooltip:
           'Skin Creator gesperrt: Stretch-Goal-Feature, fernaktivierbar.',
+      AppKeys.startWithWindows: 'Mit Windows starten',
     },
     'zh': {
       AppKeys.home: '首页',
@@ -541,6 +547,7 @@ class AppStrings {
       AppKeys.clear: '清除',
       AppKeys.skinCreatorLockedTooltip:
           'Skin Creator 已锁定：这是一个可通过远程配置启用的 stretch goal 功能。',
+      AppKeys.startWithWindows: '开机自启动',
     },
     'ja': {
       AppKeys.home: 'ホーム',
@@ -615,6 +622,7 @@ class AppStrings {
       AppKeys.clear: 'クリア',
       AppKeys.skinCreatorLockedTooltip:
           'Skin Creator はロックされています。これはリモートで有効化できるストレッチゴール機能です。',
+      AppKeys.startWithWindows: 'Windowsと一緒に起動',
     },
   };
 
