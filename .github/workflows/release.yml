@@ -1,39 +1,46 @@
 name: Build and Release
 
-# Trigger: si attiva quando fai push di un tag nel formato v1.2.3
 on:
   push:
     tags:
       - 'v*.*.*'
 
-# Permesso per creare Release e caricare file
 permissions:
   contents: write
 
 jobs:
   build:
-    runs-on: windows-latest   # VM Windows su cui gira tutto
+    runs-on: windows-latest
 
     steps:
-      # 1. Scarica il codice del commit/tag corrente
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. Installa Flutter SDK (stable, con cache per runs successive)
+      # --- Python backend ---
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies and PyInstaller
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build backend executable
+        run: pyinstaller console_deck_pro.spec
+
+      # --- Flutter UI ---
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      # 3. Scarica le dipendenze Dart del progetto UI
       - name: Flutter pub get
         working-directory: UI
         run: flutter pub get
 
-      # 4. Builda l'app Windows in modalità release
-      #    Le variabili SKIN_API_URL e SKIN_API_KEY vengono dai GitHub Secrets
-      #    (Settings → Secrets → Actions della repo)
       - name: Build Flutter Windows app
         working-directory: UI
         shell: pwsh
@@ -45,19 +52,17 @@ jobs:
             --dart-define=SKIN_API_URL="$env:SKIN_API_URL" `
             --dart-define=SKIN_API_KEY="$env:SKIN_API_KEY"
 
-      # 5. Installa Inno Setup (il compilatore dell'installer)
+      # --- Installer ---
+
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
 
-      # 6. Compila l'installer passando la versione dal tag git (es. v1.2.3 → 1.2.3)
       - name: Compile installer
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=$version "UI\setup.iss"
 
-      # 7. Crea la GitHub Release e allega il Setup.exe
-      #    generate_release_notes: crea automaticamente il changelog dai commit
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

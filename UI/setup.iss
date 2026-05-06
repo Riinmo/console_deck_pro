@@ -37,9 +37,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; IMPORTANT: Ensure you have run "flutter build windows" before compiling this script
 Source: "build\windows\x64\runner\Release\console_deck_ui.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb"
-; Python backend source files for manual launch from terminal.
-Source: "..\console_deck_pro.py"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\requirements.txt"; DestDir: "{app}"; Flags: ignoreversion
+; Python backend compiled executable (built by PyInstaller in CI)
+Source: "..\dist\console_deck_pro.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\config.example.json"; DestDir: "{app}"; Flags: ignoreversion
 
 [InstallDelete]

@@ -66,16 +66,18 @@ The OLED display should light up and show the boot screen. Done — you never ne
 2. Download `ConsoleDeckPro_Setup.exe`
 3. Run the installer and follow the wizard
 
-The installer includes everything: the UI app, the Python backend, and an example config.
+The installer includes everything: the UI app and the backend — no Python installation required.
 
 ---
 
 ### Step 4 — First launch
 
 1. Open **Console Deck PRO** from the Start menu (or desktop shortcut)
-2. The app starts automatically — no manual Python setup required
+2. The backend starts automatically in the background — nothing extra to run
 3. Go to **Settings** and select the Arduino serial port (e.g. `COM3`)
 4. The OLED display will show the connected state and begin displaying PC stats
+
+> **Tip:** enable **Start with Windows** in Settings to have the app launch automatically at login.
 
 ---
 
@@ -84,8 +86,6 @@ The installer includes everything: the UI app, the Python backend, and an exampl
 1. Go to the **Modules** tab in the app
 2. Click any button slot to assign an action
 3. Changes save automatically and take effect immediately
-
-An example starting config is included in `config.example.json` inside the install folder for reference.
 
 ---
 
