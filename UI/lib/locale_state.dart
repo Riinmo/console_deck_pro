@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'services/config_service.dart';
 
 class LocaleNotifier extends ValueNotifier<Locale> {
   LocaleNotifier() : super(const Locale('en')) {
@@ -18,6 +19,7 @@ class LocaleNotifier extends ValueNotifier<Locale> {
     value = Locale(languageCode);
     final prefs = await SharedPreferences.getInstance();
     prefs.setString(_key, languageCode);
+    ConfigService.saveLanguage(languageCode);
   }
 }
 

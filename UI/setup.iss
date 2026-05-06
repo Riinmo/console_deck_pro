@@ -39,7 +39,6 @@ Source: "build\windows\x64\runner\Release\console_deck_ui.exe"; DestDir: "{app}"
 Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb"
 ; Python backend source files for manual launch from terminal.
 Source: "..\console_deck_pro.py"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\module_extensions.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\requirements.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\config.example.json"; DestDir: "{app}"; Flags: ignoreversion
 

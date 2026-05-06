@@ -17,8 +17,88 @@ from fastapi import FastAPI
 from threading import Thread, Event
 import uvicorn
 from serial.tools import list_ports
-from module_extensions import SpecialModuleManager
 import requests as _requests
+
+try:
+    import pygame
+    HAS_PYGAME = True
+except ImportError:
+    HAS_PYGAME = False
+
+try:
+    from playsound import playsound
+    HAS_PLAYSOUND = True
+except Exception:
+    HAS_PLAYSOUND = False
+
+try:
+    import winsound
+    HAS_WINSOUND = True
+except Exception:
+    HAS_WINSOUND = False
+
+_pygame_audio_ready = False
+
+def _init_pygame_audio():
+    global _pygame_audio_ready
+    if _pygame_audio_ready:
+        return True
+    if not HAS_PYGAME:
+        return False
+    try:
+        if not pygame.mixer.get_init():
+            pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+        _pygame_audio_ready = True
+        return True
+    except Exception as e:
+        print(f"[WARNING] pygame audio init failed: {e}")
+        return False
+
+def _play_audio_one_shot(file_path):
+    """Play a one-shot audio file for button mappings."""
+    if not file_path or not os.path.isfile(file_path):
+        if ENABLE_ACTION_LOG:
+            print(f"[AUDIO] File not found: {file_path}")
+        return
+
+    if _init_pygame_audio():
+        try:
+            pygame.mixer.music.load(file_path)
+            pygame.mixer.music.play()
+            return
+        except Exception:
+            pass
+        try:
+            pygame.mixer.Sound(file_path).play()
+            return
+        except Exception:
+            pass
+
+    if HAS_PLAYSOUND:
+        try:
+            threading.Thread(
+                target=playsound, args=(file_path,),
+                kwargs={"block": False}, daemon=True,
+            ).start()
+            return
+        except Exception:
+            pass
+
+    if HAS_WINSOUND and file_path.lower().endswith(".wav"):
+        try:
+            winsound.PlaySound(file_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+            return
+        except Exception:
+            pass
+
+    try:
+        system = platform.system()
+        if system == "Darwin":
+            subprocess.Popen(["afplay", file_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif system == "Linux":
+            subprocess.Popen(["aplay", "-q", file_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (FileNotFoundError, OSError):
+        pass
 
 
 def _press_system_volume_key(key: str, count: int = 1):
@@ -120,11 +200,6 @@ config_updated_event = Event() # Used to signal the main thread to reload the co
 last_volume_target = None
 # For slider brightness: store previous raw value so we apply delta, not absolute
 _last_brightness_slider_raw = None
-special_module_manager = SpecialModuleManager(
-    APP_DIR,
-    event_log=ENABLE_EVENT_LOG,
-    action_log=ENABLE_ACTION_LOG,
-)
 
 @app.post("/reload")
 def reload_config_endpoint():
@@ -316,7 +391,7 @@ def execute_action(action_def, absolute_value=None, multiplier=1):
         elif action_type == 'play_audio':
             file_path = str(value or "")
             if file_path:
-                special_module_manager.play_one_shot(file_path)
+                _play_audio_one_shot(file_path)
                 if ENABLE_ACTION_LOG:
                     print(f"     Play Audio: {file_path}")
         elif action_type == 'home_assistant':
@@ -325,15 +400,32 @@ def execute_action(action_def, absolute_value=None, multiplier=1):
             token = str(ha_cfg.get('token', ''))
             service = str(action_def.get('service', ''))
             entity_id = str(action_def.get('entity_id', ''))
-            if not (host and token and service and entity_id):
-                print("     [WARNING] Home Assistant action: missing host, token, service, or entity_id")
+            missing = [k for k, v in [('host', host), ('token', token), ('service', service), ('entity_id', entity_id)] if not v]
+            if missing:
+                print(f"     [WARNING] Home Assistant: missing {', '.join(missing)}. Configure HA in Settings.")
             else:
-                domain = entity_id.split('.')[0] if '.' in entity_id else entity_id
-                url = f"{host}/api/services/{domain}/{service}"
-                headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-                resp = _requests.post(url, headers=headers, json={"entity_id": entity_id}, timeout=5)
-                if ENABLE_ACTION_LOG:
-                    print(f"     HA {service} on {entity_id} → {resp.status_code}")
+                try:
+                    domain = entity_id.split('.')[0] if '.' in entity_id else entity_id
+                    url = f"{host}/api/services/{domain}/{service}"
+                    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+                    resp = _requests.post(url, headers=headers, json={"entity_id": entity_id}, timeout=5)
+                    if resp.status_code in (200, 201):
+                        if ENABLE_ACTION_LOG:
+                            print(f"     HA {service} on {entity_id} → OK ({resp.status_code})")
+                    elif resp.status_code == 401:
+                        print(f"     [ERROR] HA: Invalid or expired token. Update the token in Settings.")
+                    elif resp.status_code == 404:
+                        print(f"     [ERROR] HA: Service '{domain}/{service}' or entity '{entity_id}' not found.")
+                    elif resp.status_code == 400:
+                        print(f"     [ERROR] HA: Bad request for '{entity_id}'/'{service}': {resp.text[:200]}")
+                    else:
+                        print(f"     [ERROR] HA: HTTP {resp.status_code} for '{entity_id}': {resp.text[:200]}")
+                except _requests.exceptions.ConnectionError:
+                    print(f"     [ERROR] HA: Cannot connect to '{host}'. Check the URL in Settings.")
+                except _requests.exceptions.Timeout:
+                    print(f"     [ERROR] HA: Request to '{host}' timed out. HA may be unreachable.")
+                except _requests.exceptions.RequestException as e:
+                    print(f"     [ERROR] HA: Request failed: {e}")
         else:
             print(f"     [WARNING] Unknown action type: {action_type}")
     except Exception as e:
@@ -345,14 +437,7 @@ def reload_config_if_requested():
     if config_updated_event.is_set():
         config_data = load_config()
         config_updated_event.clear()
-        sync_special_module_manager()
 
-
-def sync_special_module_manager():
-    global config_data
-    ensure_config_loaded()
-    if isinstance(config_data, dict):
-        special_module_manager.update_config(config_data)
 
 def _get_gpu_stats():
     """
@@ -531,7 +616,6 @@ def main():
     if not config_data:
         print("Error: Could not load or create a configuration file. Exiting.")
         return
-    sync_special_module_manager()
 
     # --- Main Loop ---
     while True:
@@ -599,6 +683,8 @@ def run_device_loop(ser):
     action_executor = ActionExecutor().start()
     telemetry = TelemetrySampler(interval_s=0.5, slow_interval_s=2.0).start()
 
+    _send_boot_message(ser)
+
     stats_interval_s = 0.5
     next_stats_time = time.monotonic()
 
@@ -663,7 +749,9 @@ def run_device_loop(ser):
                     gpu_temp_c = snap["gpu_temp_c"]
 
                     now_dt = datetime.now()
-                    stats_msg = f"STATS:{cpu},{gpu},{ram},{cpu_freq_mhz},{gpu_temp_c},{now_dt.strftime('%H:%M')},{now_dt.strftime('%d/%m')}\n"
+                    lang = config_data.get('language', 'en') if isinstance(config_data, dict) else 'en'
+                    date_fmt = _get_date_format(lang)
+                    stats_msg = f"STATS:{cpu},{gpu},{ram},{cpu_freq_mhz},{gpu_temp_c},{now_dt.strftime('%H:%M:%S')},{now_dt.strftime(date_fmt)}\n"
                     ser.write(stats_msg.encode("utf-8"))
                     if ENABLE_TELEMETRY_LOG:
                         gpu_str = f"{gpu}%" if gpu != -1 else "N/A"
@@ -809,13 +897,35 @@ def process_serial_line(line, prev_main_btns, prev_enc_click, prev_enc_val, prev
 
                 prev_vals[0] = handle_analog(val1, prev_vals[0], f"{prefix}_1")
                 prev_vals[1] = handle_analog(val2, prev_vals[1], f"{prefix}_2")
-        elif module_id == 4:
-            special_module_manager.handle_media_payload(parts[12:])
-        elif module_id == 5:
-            special_module_manager.handle_piano_payload(parts[12:])
     
     except (ValueError, IndexError) as e:
         print(f"\n[WARNING] Could not parse serial line: '{line}'. Error: {e}")
+
+_DATE_FORMATS = {
+    'en': '%d/%m',
+    'it': '%d/%m',
+    'es': '%d/%m',
+    'fr': '%d/%m',
+    'de': '%d.%m',
+    'zh': '%m-%d',
+    'ja': '%m/%d',
+}
+
+def _get_date_format(lang: str) -> str:
+    return _DATE_FORMATS.get(lang, '%d/%m')
+
+def _send_boot_message(ser):
+    """Send initial time sync immediately after serial connection is established."""
+    try:
+        now_dt = datetime.now()
+        lang = config_data.get('language', 'en') if isinstance(config_data, dict) else 'en'
+        date_fmt = _get_date_format(lang)
+        boot_msg = f"BOOT:{now_dt.strftime('%H:%M:%S')},{now_dt.strftime(date_fmt)}\n"
+        ser.write(boot_msg.encode("utf-8"))
+        if ENABLE_ACTION_LOG:
+            print(f"[INFO] Boot message sent: {boot_msg.strip()}")
+    except Exception as e:
+        print(f"[WARNING] Could not send boot message: {e}")
 
 def get_cpu_freq_mhz():
     """Best-effort CPU frequency (MHz). Returns -1 if unavailable."""
@@ -836,12 +946,6 @@ if __name__ == "__main__":
         print("\n[INFO] Program terminated by user.")
     except Exception as e:
         print(f"\n[FATAL] An unhandled exception occurred in main: {e}")
-    finally:
-        try:
-            special_module_manager.close()
-        except Exception:
-            pass
-        
     try:
         if os.isatty(0):
             input("\n[INFO] Press Enter to close this window...")

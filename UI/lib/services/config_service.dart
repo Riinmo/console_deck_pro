@@ -95,7 +95,6 @@ class ConfigService {
         'main': <String, dynamic>{},
         'modules': <String, dynamic>{},
       },
-      'special_modules': <String, dynamic>{},
     };
   }
 
@@ -189,6 +188,17 @@ class ConfigService {
     }
   }
 
+  static Future<void> saveLanguage(String languageCode) async {
+    try {
+      final file = await _configFile;
+      final config = await _readConfigFile(file);
+      config['language'] = languageCode;
+      await _writeConfig(file, config);
+    } catch (e) {
+      if (kDebugMode) print('Error saving language: $e');
+    }
+  }
+
   static Future<void> saveHaConfig(String host, String token) async {
     try {
       final file = await _configFile;
@@ -257,71 +267,6 @@ class ConfigService {
     }
   }
 
-  static Future<void> saveSpecialModuleConfig(
-    String moduleId,
-    Map<String, dynamic> moduleConfig, {
-    List<String> removeMappingKeys = const [],
-  }) async {
-    try {
-      final file = await _configFile;
-      final config = await _readConfigFile(file);
-
-      final specialModules = Map<String, dynamic>.from(
-        (config['special_modules'] as Map?) ?? const {},
-      );
-      specialModules[moduleId] = moduleConfig;
-      config['special_modules'] = specialModules;
-
-      if (removeMappingKeys.isNotEmpty) {
-        final mappings = _normalizeMappings(config);
-        final mainMappings = Map<String, dynamic>.from(
-          (mappings['main'] as Map?) ?? const {},
-        );
-        final moduleMappings = Map<String, dynamic>.from(
-          (mappings['modules'] as Map?) ?? const {},
-        );
-        for (final key in removeMappingKeys) {
-          if (_isMainMappingKey(key)) {
-            mainMappings.remove(key);
-          } else {
-            moduleMappings.remove(key);
-          }
-        }
-        mappings['main'] = mainMappings;
-        mappings['modules'] = moduleMappings;
-        config['mappings'] = mappings;
-      }
-
-      await _writeConfig(file, config);
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error saving special module config: $e');
-      }
-    }
-  }
-
-  static Future<Map<String, dynamic>> loadSpecialModuleConfig(
-    String moduleId,
-  ) async {
-    try {
-      final config = await loadConfig();
-      final specialModules =
-          config['special_modules'] as Map<String, dynamic>? ?? {};
-      final data = specialModules[moduleId];
-      if (data is Map<String, dynamic>) {
-        return data;
-      }
-      if (data is Map) {
-        return Map<String, dynamic>.from(data);
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error loading special module config: $e');
-      }
-    }
-    return {};
-  }
-
   static Future<void> _writeConfig(
     File file,
     Map<String, dynamic> config,
@@ -349,8 +294,7 @@ class ConfigService {
           'main': <String, dynamic>{},
           'modules': <String, dynamic>{},
         },
-        'special_modules': <String, dynamic>{},
-      };
+        };
     }
 
     try {
@@ -359,8 +303,7 @@ class ConfigService {
         return {
           'serial': {'port': null, 'baud_rate': 115200},
           'mappings': <String, dynamic>{},
-          'special_modules': <String, dynamic>{},
-        };
+            };
       }
 
       final decoded = jsonDecode(content);
@@ -373,9 +316,6 @@ class ConfigService {
         serial.putIfAbsent('baud_rate', () => 115200);
         normalized['serial'] = serial;
         _normalizeMappings(normalized);
-        normalized['special_modules'] = Map<String, dynamic>.from(
-          (normalized['special_modules'] as Map?) ?? const {},
-        );
         return normalized;
       }
     } catch (_) {
@@ -388,7 +328,6 @@ class ConfigService {
         'main': <String, dynamic>{},
         'modules': <String, dynamic>{},
       },
-      'special_modules': <String, dynamic>{},
     };
   }
 

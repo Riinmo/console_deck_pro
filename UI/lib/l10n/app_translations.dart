@@ -19,6 +19,8 @@ class AppKeys {
   static const String typeLink = 'type_link';
   static const String typeApp = 'type_app';
   static const String typeHotkey = 'type_hotkey';
+  static const String typeAudio = 'type_audio';
+  static const String audioFile = 'audio_file';
   static const String actionVolume = 'action_volume';
   static const String actionBrightness = 'action_brightness';
   static const String url = 'url';
@@ -32,20 +34,15 @@ class AppKeys {
   static const String selectModuleHint = 'select_module_hint';
 
   // Module Names
-  static const String moduleMedia = 'module_media';
   static const String moduleKnobs = 'module_knobs';
   static const String moduleSliders = 'module_sliders';
   static const String moduleTouch = 'module_touch';
-  static const String moduleSwitch = 'module_switch';
   static const String moduleExtendedBtn = 'module_extended_btn';
-  static const String modulePiano = 'module.piano';
-  static const String moduleModeling = 'module.modeling';
   static const String serialPort = 'settings.serialPort';
   static const String selectPort = 'settings.selectPort';
   static const String noPortsFound = 'settings.noPortsFound';
   static const String portSaved = 'settings.portSaved';
-  static const String backendConnectionError =
-      'settings.backendConnectionError';
+  static const String backendConnectionError = 'settings.backendConnectionError';
   static const String statusConnected = 'status.connected';
   static const String statusNotConfigured = 'status.notConfigured';
   static const String statusBackendDown = 'status.backendDown';
@@ -54,13 +51,6 @@ class AppKeys {
   static const String configPromptButton = 'config.promptButton';
   static const String alertNotConfiguredText = 'alert.notConfigured.text';
   static const String alertNotConfiguredButton = 'alert.notConfigured.button';
-
-  // Media Module Actions
-  static const String mediaPlayPause = 'media_play_pause';
-  static const String mediaNext = 'media_next';
-  static const String mediaPrev = 'media_prev';
-  static const String mediaVolUp = 'media_vol_up';
-  static const String mediaVolDown = 'media_vol_down';
 
   // Settings Links
   static const String visitWebsite = 'visit_website';
@@ -71,6 +61,7 @@ class AppKeys {
   static const String reportBodyPrototype = 'report_body_prototype';
   static const String browse = 'browse';
   static const String generate = 'generate';
+
   // Upload / Skin generation messages
   static const String uploadSuccess = 'upload_success';
   static const String uploadAuthError = 'upload_auth_error';
@@ -85,25 +76,6 @@ class AppKeys {
   static const String fileSavedPrefix = 'file_saved_prefix';
   static const String errorPrefix = 'error_prefix';
   static const String clear = 'clear';
-  static const String mediaDeckLeft = 'media_deck_left';
-  static const String mediaDeckRight = 'media_deck_right';
-  static const String mediaSelectTrack = 'media_select_track';
-  static const String mediaNoTrackSelected = 'media_no_track_selected';
-  static const String mediaTogglePlay = 'media_toggle_play';
-  static const String mediaStop = 'media_stop';
-  static const String mediaJogBackward = 'media_jog_backward';
-  static const String mediaJogForward = 'media_jog_forward';
-  static const String mediaCrossfader = 'media_crossfader';
-  static const String mediaResetCrossfader = 'media_reset_crossfader';
-  static const String mediaHintLongPress = 'media_hint_long_press';
-  static const String pianoHintTap = 'piano_hint_tap';
-  static const String pianoHintLongPress = 'piano_hint_long_press';
-  static const String pianoUseDefaultNote = 'piano_use_default_note';
-  static const String pianoAssignedFile = 'piano_assigned_file';
-  static const String pianoResetToNote = 'piano_reset_to_note';
-  static const String pianoPickAudio = 'piano_pick_audio';
-  static const String pianoPlaySample = 'piano_play_sample';
-  static const String audioFileMissing = 'audio_file_missing';
   static const String skinCreatorLockedTooltip = 'skin_creator_locked_tooltip';
 }
 
@@ -127,6 +99,8 @@ class AppStrings {
       AppKeys.typeLink: 'Link',
       AppKeys.typeApp: 'App',
       AppKeys.typeHotkey: 'Hotkey',
+      AppKeys.typeAudio: 'Audio',
+      AppKeys.audioFile: 'Audio File',
       AppKeys.actionVolume: 'Volume',
       AppKeys.actionBrightness: 'Brightness',
       AppKeys.url: 'URL',
@@ -138,14 +112,10 @@ class AppStrings {
       AppKeys.save: 'Save',
       AppKeys.modulesPageTitle: 'Modules Page',
       AppKeys.selectModuleHint: 'Select a module to configure',
-      AppKeys.moduleMedia: 'Media',
       AppKeys.moduleKnobs: 'Knobs',
       AppKeys.moduleSliders: 'Sliders',
       AppKeys.moduleTouch: 'Touch',
-      AppKeys.moduleSwitch: 'Switches',
       AppKeys.moduleExtendedBtn: 'Extended Buttons',
-      AppKeys.modulePiano: 'Piano',
-      AppKeys.moduleModeling: '3D Modeling',
       AppKeys.serialPort: 'Serial Port',
       AppKeys.selectPort: 'Select a port',
       AppKeys.noPortsFound: 'No ports found',
@@ -162,11 +132,6 @@ class AppStrings {
       AppKeys.alertNotConfiguredText:
           'Serial port not configured. Please select a port to connect to the device.',
       AppKeys.alertNotConfiguredButton: 'Open Settings',
-      AppKeys.mediaPlayPause: 'Play/Pause',
-      AppKeys.mediaNext: 'Next Track',
-      AppKeys.mediaPrev: 'Previous Track',
-      AppKeys.mediaVolUp: 'Volume Up',
-      AppKeys.mediaVolDown: 'Volume Down',
       AppKeys.visitWebsite: 'Visit Website',
       AppKeys.visitMakerWorld: 'Visit MakerWorld',
       AppKeys.socialNetworks: 'Social Networks',
@@ -175,7 +140,6 @@ class AppStrings {
       AppKeys.reportBodyPrototype: 'Issue Description: ',
       AppKeys.browse: 'Browse',
       AppKeys.generate: 'Generate',
-      // Upload / Skin generation messages
       AppKeys.uploadSuccess: 'Success! Your 3D file is ready.',
       AppKeys.uploadAuthError: 'App authentication failed.',
       AppKeys.uploadTooLarge: 'File is too large. Maximum 5MB.',
@@ -190,28 +154,6 @@ class AppStrings {
       AppKeys.errorPrefix: 'Error:',
       AppKeys.openFolder: 'Open Folder',
       AppKeys.clear: 'Clear',
-      AppKeys.mediaDeckLeft: 'Left Deck',
-      AppKeys.mediaDeckRight: 'Right Deck',
-      AppKeys.mediaSelectTrack: 'Select audio track',
-      AppKeys.mediaNoTrackSelected: 'No track selected',
-      AppKeys.mediaTogglePlay: 'Play/Pause',
-      AppKeys.mediaStop: 'Stop',
-      AppKeys.mediaJogBackward: 'Jog Back',
-      AppKeys.mediaJogForward: 'Jog Forward',
-      AppKeys.mediaCrossfader: 'Crossfader',
-      AppKeys.mediaResetCrossfader: 'Reset to center',
-      AppKeys.mediaHintLongPress:
-          'Tap knobs to play/pause. Long press to choose track.',
-      AppKeys.pianoHintTap: 'Tap a key to play.',
-      AppKeys.pianoHintLongPress:
-          'Long press a key to assign a custom audio file.',
-      AppKeys.pianoUseDefaultNote: 'Use default note',
-      AppKeys.pianoAssignedFile: 'Assigned file',
-      AppKeys.pianoResetToNote: 'Reset key to note',
-      AppKeys.pianoPickAudio: 'Pick audio file',
-      AppKeys.pianoPlaySample: 'Play sample',
-      AppKeys.audioFileMissing:
-          'Audio file not found. Playing default note instead.',
       AppKeys.skinCreatorLockedTooltip:
           'Skin Creator is currently locked. This is a stretch-goal feature that can be enabled remotely.',
     },
@@ -234,6 +176,8 @@ class AppStrings {
       AppKeys.typeLink: 'Link',
       AppKeys.typeApp: 'App',
       AppKeys.typeHotkey: 'Hotkey',
+      AppKeys.typeAudio: 'Audio',
+      AppKeys.audioFile: 'File Audio',
       AppKeys.actionVolume: 'Volume',
       AppKeys.actionBrightness: 'Luminosita',
       AppKeys.url: 'URL',
@@ -245,14 +189,10 @@ class AppStrings {
       AppKeys.save: 'Salva',
       AppKeys.modulesPageTitle: 'Pagina Moduli',
       AppKeys.selectModuleHint: 'Seleziona un modulo per configurarlo',
-      AppKeys.moduleMedia: 'Media',
       AppKeys.moduleKnobs: 'Manopole',
       AppKeys.moduleSliders: 'Slider',
       AppKeys.moduleTouch: 'Touch',
-      AppKeys.moduleSwitch: 'Interruttori',
       AppKeys.moduleExtendedBtn: 'Pulsanti Estesi',
-      AppKeys.modulePiano: 'Pianoforte',
-      AppKeys.moduleModeling: 'Modellazione 3D',
       AppKeys.serialPort: 'Porta Seriale',
       AppKeys.selectPort: 'Seleziona una porta',
       AppKeys.noPortsFound: 'Nessuna porta trovata',
@@ -269,11 +209,6 @@ class AppStrings {
       AppKeys.alertNotConfiguredText:
           'Porta seriale non configurata. Seleziona un porto per connetterti al dispositivo.',
       AppKeys.alertNotConfiguredButton: 'Apri Impostazioni',
-      AppKeys.mediaPlayPause: 'Play/Pausa',
-      AppKeys.mediaNext: 'Traccia Successiva',
-      AppKeys.mediaPrev: 'Traccia Precedente',
-      AppKeys.mediaVolUp: 'Volume +',
-      AppKeys.mediaVolDown: 'Volume -',
       AppKeys.visitWebsite: 'Visita il Sito',
       AppKeys.visitMakerWorld: 'Visita MakerWorld',
       AppKeys.socialNetworks: 'Social Network',
@@ -282,7 +217,6 @@ class AppStrings {
       AppKeys.reportBodyPrototype: 'Descrizione del problema: ',
       AppKeys.browse: 'Sfoglia',
       AppKeys.generate: 'Genera',
-      // Upload / Skin generation messages (Italian)
       AppKeys.uploadSuccess: 'Successo! Il tuo file 3D è pronto.',
       AppKeys.uploadAuthError: "Errore di autenticazione dell'app.",
       AppKeys.uploadTooLarge: "Il file è troppo pesante. Massimo 5MB.",
@@ -298,28 +232,6 @@ class AppStrings {
       AppKeys.errorPrefix: 'Errore:',
       AppKeys.openFolder: 'Apri Cartella',
       AppKeys.clear: 'Pulisci',
-      AppKeys.mediaDeckLeft: 'Deck Sinistro',
-      AppKeys.mediaDeckRight: 'Deck Destro',
-      AppKeys.mediaSelectTrack: 'Seleziona traccia audio',
-      AppKeys.mediaNoTrackSelected: 'Nessuna traccia selezionata',
-      AppKeys.mediaTogglePlay: 'Play/Pausa',
-      AppKeys.mediaStop: 'Stop',
-      AppKeys.mediaJogBackward: 'Jog Indietro',
-      AppKeys.mediaJogForward: 'Jog Avanti',
-      AppKeys.mediaCrossfader: 'Crossfader',
-      AppKeys.mediaResetCrossfader: 'Reset al centro',
-      AppKeys.mediaHintLongPress:
-          'Tocca le manopole per play/pausa. Tieni premuto per scegliere la traccia.',
-      AppKeys.pianoHintTap: 'Tocca un tasto per suonare.',
-      AppKeys.pianoHintLongPress:
-          'Tieni premuto un tasto per assegnare un file audio personalizzato.',
-      AppKeys.pianoUseDefaultNote: 'Usa nota predefinita',
-      AppKeys.pianoAssignedFile: 'File assegnato',
-      AppKeys.pianoResetToNote: 'Resetta il tasto alla nota',
-      AppKeys.pianoPickAudio: 'Seleziona file audio',
-      AppKeys.pianoPlaySample: 'Riproduci campione',
-      AppKeys.audioFileMissing:
-          'File audio non trovato. Riproduco la nota predefinita.',
       AppKeys.skinCreatorLockedTooltip:
           'Skin Creator bloccato: feature stretch goal attivabile da configurazione remota.',
     },
@@ -342,6 +254,10 @@ class AppStrings {
       AppKeys.typeLink: 'Enlace',
       AppKeys.typeApp: 'App',
       AppKeys.typeHotkey: 'Atajo',
+      AppKeys.typeAudio: 'Audio',
+      AppKeys.audioFile: 'Archivo de Audio',
+      AppKeys.actionVolume: 'Volumen',
+      AppKeys.actionBrightness: 'Brillo',
       AppKeys.url: 'URL',
       AppKeys.urlHint: 'https://ejemplo.com',
       AppKeys.executablePath: 'Ruta Ejecutable',
@@ -351,14 +267,10 @@ class AppStrings {
       AppKeys.save: 'Guardar',
       AppKeys.modulesPageTitle: 'Página de Módulos',
       AppKeys.selectModuleHint: 'Selecciona un módulo para configurar',
-      AppKeys.moduleMedia: 'Multimedia',
       AppKeys.moduleKnobs: 'Perillas',
       AppKeys.moduleSliders: 'Deslizadores',
       AppKeys.moduleTouch: 'Táctil',
-      AppKeys.moduleSwitch: 'Interruptores',
       AppKeys.moduleExtendedBtn: 'Botones Extendidos',
-      AppKeys.modulePiano: 'Piano',
-      AppKeys.moduleModeling: 'Modelado 3D',
       AppKeys.serialPort: 'Puerto Serie',
       AppKeys.selectPort: 'Seleccione un puerto',
       AppKeys.noPortsFound: 'No se encontraron puertos',
@@ -373,33 +285,33 @@ class AppStrings {
           'El puerto serie no está configurado. Vaya a la configuración para seleccionar el puerto correcto para su dispositivo.',
       AppKeys.configPromptButton: 'Ir a Configuración',
       AppKeys.alertNotConfiguredText:
-          'Puerto serie no configurado. Seleziona un porto per connetterti al dispositivo.',
+          'Puerto serie no configurado. Seleccione un puerto para conectarse al dispositivo.',
       AppKeys.alertNotConfiguredButton: 'Abrir Configuración',
-      AppKeys.mediaPlayPause: 'Reproducir/Pausar',
-      AppKeys.mediaNext: 'Siguiente Pista',
-      AppKeys.mediaPrev: 'Pista Anterior',
-      AppKeys.mediaVolUp: 'Volume +',
-      AppKeys.mediaVolDown: 'Volume -',
       AppKeys.visitWebsite: 'Visitar Sitio Web',
-      AppKeys.visitMakerWorld: 'Besuche MakerWorld',
+      AppKeys.visitMakerWorld: 'Visitar MakerWorld',
       AppKeys.socialNetworks: 'Redes Sociales',
       AppKeys.reportProblem: 'Reportar Problema',
       AppKeys.reportSubject: 'Reporte de Problema Console Deck PRO',
       AppKeys.reportBodyPrototype: 'Descripción del problema: ',
-      // Upload messages (fallback to English)
-      AppKeys.uploadSuccess: 'Success! Your 3D file is ready.',
-      AppKeys.uploadAuthError: 'App authentication failed.',
-      AppKeys.uploadTooLarge: 'File is too large. Maximum 5MB.',
-      AppKeys.uploadInvalidSvg: 'Uploaded file is not a valid SVG.',
+      AppKeys.browse: 'Explorar',
+      AppKeys.generate: 'Generar',
+      AppKeys.uploadSuccess: '¡Éxito! Tu archivo 3D está listo.',
+      AppKeys.uploadAuthError: 'Falló la autenticación de la app.',
+      AppKeys.uploadTooLarge: 'El archivo es demasiado grande. Máximo 5MB.',
+      AppKeys.uploadInvalidSvg: 'El archivo cargado no es un SVG válido.',
       AppKeys.uploadTooManyRequests:
-          'Too many requests. Please wait and try again later!',
-      AppKeys.uploadComplexLogo: 'The logo is too complex for 3D rendering.',
-      AppKeys.uploadServerError: 'An unexpected server error occurred.',
-      AppKeys.fileNotFound: 'File not found',
-      AppKeys.fileSavedPrefix: 'File saved:',
+          '¡Demasiadas solicitudes. Espera e inténtalo más tarde!',
+      AppKeys.uploadComplexLogo:
+          'El logo es demasiado complejo para el renderizado 3D.',
+      AppKeys.uploadServerError: 'Ocurrió un error inesperado en el servidor.',
+      AppKeys.uploadTimeout: 'Tiempo agotado. Por favor inténtalo de nuevo.',
+      AppKeys.fileNotFound: 'Archivo no encontrado',
+      AppKeys.fileSavedPrefix: 'Archivo guardado:',
       AppKeys.errorPrefix: 'Error:',
-      AppKeys.openFolder: 'Open Folder',
+      AppKeys.openFolder: 'Abrir Carpeta',
       AppKeys.clear: 'Limpiar',
+      AppKeys.skinCreatorLockedTooltip:
+          'Skin Creator bloqueado: función stretch goal activable de forma remota.',
     },
     'fr': {
       AppKeys.home: 'Accueil',
@@ -421,6 +333,10 @@ class AppStrings {
       AppKeys.typeLink: 'Lien',
       AppKeys.typeApp: 'App',
       AppKeys.typeHotkey: 'Raccourci',
+      AppKeys.typeAudio: 'Audio',
+      AppKeys.audioFile: 'Fichier Audio',
+      AppKeys.actionVolume: 'Volume',
+      AppKeys.actionBrightness: 'Luminosité',
       AppKeys.url: 'URL',
       AppKeys.urlHint: 'https://exemple.com',
       AppKeys.executablePath: 'Chemin Exécutable',
@@ -430,14 +346,10 @@ class AppStrings {
       AppKeys.save: 'Sauvegarder',
       AppKeys.modulesPageTitle: 'Page Modules',
       AppKeys.selectModuleHint: 'Sélectionnez un module à configurer',
-      AppKeys.moduleMedia: 'Média',
       AppKeys.moduleKnobs: 'Boutons',
       AppKeys.moduleSliders: 'Curseurs',
       AppKeys.moduleTouch: 'Tactile',
-      AppKeys.moduleSwitch: 'Interrupteurs',
       AppKeys.moduleExtendedBtn: 'Boutons Étendus',
-      AppKeys.modulePiano: 'Piano',
-      AppKeys.moduleModeling: 'Modélisation 3D',
       AppKeys.serialPort: 'Port Série',
       AppKeys.selectPort: 'Sélectionnez un port',
       AppKeys.noPortsFound: 'Aucun port trouvé',
@@ -454,30 +366,32 @@ class AppStrings {
       AppKeys.alertNotConfiguredText:
           'Port série non configuré. Veuillez sélectionner un port pour vous connecter à l\'appareil.',
       AppKeys.alertNotConfiguredButton: 'Ouvrir les Paramètres',
-      AppKeys.mediaPlayPause: 'Lecture/Pause',
-      AppKeys.mediaNext: 'Piste Suivante',
-      AppKeys.mediaPrev: 'Piste Précédente',
-      AppKeys.mediaVolUp: 'Volume +',
-      AppKeys.mediaVolDown: 'Volume -',
       AppKeys.visitWebsite: 'Visiter le Site Web',
-      AppKeys.visitMakerWorld: 'Besuche MakerWorld',
+      AppKeys.visitMakerWorld: 'Visiter MakerWorld',
       AppKeys.socialNetworks: 'Réseaux Sociaux',
       AppKeys.reportProblem: 'Signaler un Problème',
       AppKeys.reportSubject: 'Problème Console Deck PRO',
       AppKeys.reportBodyPrototype: 'Description du problème: ',
-      AppKeys.uploadSuccess: 'Success! Your 3D file is ready.',
-      AppKeys.uploadAuthError: 'App authentication failed.',
-      AppKeys.uploadTooLarge: 'File is too large. Maximum 5MB.',
-      AppKeys.uploadInvalidSvg: 'Uploaded file is not a valid SVG.',
+      AppKeys.browse: 'Parcourir',
+      AppKeys.generate: 'Générer',
+      AppKeys.uploadSuccess: 'Succès ! Votre fichier 3D est prêt.',
+      AppKeys.uploadAuthError: "Échec de l'authentification de l'app.",
+      AppKeys.uploadTooLarge: 'Le fichier est trop volumineux. Maximum 5 Mo.',
+      AppKeys.uploadInvalidSvg: "Le fichier téléchargé n'est pas un SVG valide.",
       AppKeys.uploadTooManyRequests:
-          'Too many requests. Please wait and try again later!',
-      AppKeys.uploadComplexLogo: 'The logo is too complex for 3D rendering.',
-      AppKeys.uploadServerError: 'An unexpected server error occurred.',
-      AppKeys.fileNotFound: 'File not found',
-      AppKeys.fileSavedPrefix: 'File saved:',
-      AppKeys.errorPrefix: 'Error:',
-      AppKeys.openFolder: 'Open Folder',
+          'Trop de requêtes. Veuillez patienter et réessayer !',
+      AppKeys.uploadComplexLogo:
+          'Le logo est trop complexe pour le rendu 3D.',
+      AppKeys.uploadServerError:
+          'Une erreur de serveur inattendue est survenue.',
+      AppKeys.uploadTimeout: 'Délai dépassé. Veuillez réessayer.',
+      AppKeys.fileNotFound: 'Fichier non trouvé',
+      AppKeys.fileSavedPrefix: 'Fichier enregistré :',
+      AppKeys.errorPrefix: 'Erreur :',
+      AppKeys.openFolder: 'Ouvrir le dossier',
       AppKeys.clear: 'Effacer',
+      AppKeys.skinCreatorLockedTooltip:
+          'Skin Creator verrouillé : fonctionnalité stretch goal activable à distance.',
     },
     'de': {
       AppKeys.home: 'Startseite',
@@ -498,6 +412,10 @@ class AppStrings {
       AppKeys.typeLink: 'Link',
       AppKeys.typeApp: 'App',
       AppKeys.typeHotkey: 'Hotkey',
+      AppKeys.typeAudio: 'Audio',
+      AppKeys.audioFile: 'Audiodatei',
+      AppKeys.actionVolume: 'Lautstärke',
+      AppKeys.actionBrightness: 'Helligkeit',
       AppKeys.url: 'URL',
       AppKeys.urlHint: 'https://beispiel.de',
       AppKeys.executablePath: 'Pfad',
@@ -507,14 +425,10 @@ class AppStrings {
       AppKeys.save: 'Speichern',
       AppKeys.modulesPageTitle: 'Modulseite',
       AppKeys.selectModuleHint: 'Wählen Sie ein Modul zum Konfigurieren',
-      AppKeys.moduleMedia: 'Medien',
       AppKeys.moduleKnobs: 'Drehregler',
       AppKeys.moduleSliders: 'Schieberegler',
       AppKeys.moduleTouch: 'Touch',
-      AppKeys.moduleSwitch: 'Schalter',
       AppKeys.moduleExtendedBtn: 'Erweiterte Tasten',
-      AppKeys.modulePiano: 'Klavier',
-      AppKeys.moduleModeling: '3D-Modellierung',
       AppKeys.serialPort: 'Serieller Anschluss',
       AppKeys.selectPort: 'Wählen Sie einen Port aus',
       AppKeys.noPortsFound: 'Keine Ports gefunden',
@@ -531,30 +445,31 @@ class AppStrings {
       AppKeys.alertNotConfiguredText:
           'Serieller Port nicht konfiguriert. Bitte wählen Sie einen Port aus, um eine Verbindung zum Gerät herzustellen.',
       AppKeys.alertNotConfiguredButton: 'Einstellungen öffnen',
-      AppKeys.mediaPlayPause: 'Wiedergabe/Pause',
-      AppKeys.mediaNext: 'Nächster Titel',
-      AppKeys.mediaPrev: 'Vorheriger Titel',
-      AppKeys.mediaVolUp: 'Lautstärke +',
-      AppKeys.mediaVolDown: 'Lautstärke -',
       AppKeys.visitWebsite: 'Webseite Besuchen',
-      AppKeys.visitMakerWorld: 'Besuche MakerWorld',
+      AppKeys.visitMakerWorld: 'MakerWorld Besuchen',
       AppKeys.socialNetworks: 'Soziale Netzwerke',
       AppKeys.reportProblem: 'Problem Melden',
       AppKeys.reportSubject: 'Console Deck PRO Problem',
       AppKeys.reportBodyPrototype: 'Problembeschreibung: ',
-      AppKeys.uploadSuccess: 'Success! Your 3D file is ready.',
-      AppKeys.uploadAuthError: 'App authentication failed.',
-      AppKeys.uploadTooLarge: 'File is too large. Maximum 5MB.',
-      AppKeys.uploadInvalidSvg: 'Uploaded file is not a valid SVG.',
+      AppKeys.browse: 'Durchsuchen',
+      AppKeys.generate: 'Generieren',
+      AppKeys.uploadSuccess: 'Erfolg! Ihre 3D-Datei ist bereit.',
+      AppKeys.uploadAuthError: 'App-Authentifizierung fehlgeschlagen.',
+      AppKeys.uploadTooLarge: 'Die Datei ist zu groß. Maximum 5 MB.',
+      AppKeys.uploadInvalidSvg: 'Die hochgeladene Datei ist kein gültiges SVG.',
       AppKeys.uploadTooManyRequests:
-          'Too many requests. Please wait and try again later!',
-      AppKeys.uploadComplexLogo: 'The logo is too complex for 3D rendering.',
-      AppKeys.uploadServerError: 'An unexpected server error occurred.',
-      AppKeys.fileNotFound: 'File not found',
-      AppKeys.fileSavedPrefix: 'File saved:',
-      AppKeys.errorPrefix: 'Error:',
-      AppKeys.openFolder: 'Open Folder',
+          'Zu viele Anfragen. Bitte warten und später erneut versuchen!',
+      AppKeys.uploadComplexLogo:
+          'Das Logo ist zu komplex für das 3D-Rendering.',
+      AppKeys.uploadServerError: 'Ein unerwarteter Serverfehler ist aufgetreten.',
+      AppKeys.uploadTimeout: 'Zeitüberschreitung. Bitte versuche es erneut.',
+      AppKeys.fileNotFound: 'Datei nicht gefunden',
+      AppKeys.fileSavedPrefix: 'Datei gespeichert:',
+      AppKeys.errorPrefix: 'Fehler:',
+      AppKeys.openFolder: 'Ordner öffnen',
       AppKeys.clear: 'Löschen',
+      AppKeys.skinCreatorLockedTooltip:
+          'Skin Creator gesperrt: Stretch-Goal-Feature, fernaktivierbar.',
     },
     'zh': {
       AppKeys.home: '首页',
@@ -573,6 +488,10 @@ class AppStrings {
       AppKeys.typeLink: '链接',
       AppKeys.typeApp: '应用',
       AppKeys.typeHotkey: '热键',
+      AppKeys.typeAudio: '音频',
+      AppKeys.audioFile: '音频文件',
+      AppKeys.actionVolume: '音量',
+      AppKeys.actionBrightness: '亮度',
       AppKeys.url: 'URL',
       AppKeys.urlHint: 'https://example.com',
       AppKeys.executablePath: '执行路径',
@@ -582,14 +501,10 @@ class AppStrings {
       AppKeys.save: '保存',
       AppKeys.modulesPageTitle: '模块页面',
       AppKeys.selectModuleHint: '选择要配置的模块',
-      AppKeys.moduleMedia: '媒体',
       AppKeys.moduleKnobs: '旋钮',
       AppKeys.moduleSliders: '滑块',
       AppKeys.moduleTouch: '触摸',
-      AppKeys.moduleSwitch: '开关',
       AppKeys.moduleExtendedBtn: '扩展按钮',
-      AppKeys.modulePiano: '钢琴',
-      AppKeys.moduleModeling: '3D建模',
       AppKeys.serialPort: '串口',
       AppKeys.selectPort: '选择一个端口',
       AppKeys.noPortsFound: '未找到端口',
@@ -603,30 +518,29 @@ class AppStrings {
       AppKeys.configPromptButton: '前往设置',
       AppKeys.alertNotConfiguredText: '串行端口未配置。请选择一个端口以连接到设备。',
       AppKeys.alertNotConfiguredButton: '打开设置',
-      AppKeys.mediaPlayPause: '播放/暂停',
-      AppKeys.mediaNext: '下一首',
-      AppKeys.mediaPrev: '上一首',
-      AppKeys.mediaVolUp: '音量 +',
-      AppKeys.mediaVolDown: '音量 -',
       AppKeys.visitWebsite: '访问网站',
       AppKeys.visitMakerWorld: '访问 MakerWorld',
       AppKeys.socialNetworks: '社交网络',
       AppKeys.reportProblem: '报告问题',
       AppKeys.reportSubject: 'Console Deck PRO 问题报告',
       AppKeys.reportBodyPrototype: '问题描述: ',
-      AppKeys.uploadSuccess: 'Success! Your 3D file is ready.',
-      AppKeys.uploadAuthError: 'App authentication failed.',
-      AppKeys.uploadTooLarge: 'File is too large. Maximum 5MB.',
-      AppKeys.uploadInvalidSvg: 'Uploaded file is not a valid SVG.',
-      AppKeys.uploadTooManyRequests:
-          'Too many requests. Please wait and try again later!',
-      AppKeys.uploadComplexLogo: 'The logo is too complex for 3D rendering.',
-      AppKeys.uploadServerError: 'An unexpected server error occurred.',
-      AppKeys.fileNotFound: 'File not found',
-      AppKeys.fileSavedPrefix: 'File saved:',
-      AppKeys.errorPrefix: 'Error:',
-      AppKeys.openFolder: 'Open Folder',
+      AppKeys.browse: '浏览',
+      AppKeys.generate: '生成',
+      AppKeys.uploadSuccess: '成功！您的3D文件已准备好。',
+      AppKeys.uploadAuthError: '应用认证失败。',
+      AppKeys.uploadTooLarge: '文件过大，最大5MB。',
+      AppKeys.uploadInvalidSvg: '上传的文件不是有效的SVG。',
+      AppKeys.uploadTooManyRequests: '请求过多，请稍后重试！',
+      AppKeys.uploadComplexLogo: '徽标过于复杂，无法进行3D渲染。',
+      AppKeys.uploadServerError: '发生意外服务器错误。',
+      AppKeys.uploadTimeout: '操作超时，请重试。',
+      AppKeys.fileNotFound: '文件未找到',
+      AppKeys.fileSavedPrefix: '文件已保存：',
+      AppKeys.errorPrefix: '错误：',
+      AppKeys.openFolder: '打开文件夹',
       AppKeys.clear: '清除',
+      AppKeys.skinCreatorLockedTooltip:
+          'Skin Creator 已锁定：这是一个可通过远程配置启用的 stretch goal 功能。',
     },
     'ja': {
       AppKeys.home: 'ホーム',
@@ -645,6 +559,10 @@ class AppStrings {
       AppKeys.typeLink: 'リンク',
       AppKeys.typeApp: 'アプリ',
       AppKeys.typeHotkey: 'ホットキー',
+      AppKeys.typeAudio: 'オーディオ',
+      AppKeys.audioFile: 'オーディオファイル',
+      AppKeys.actionVolume: '音量',
+      AppKeys.actionBrightness: '明るさ',
       AppKeys.url: 'URL',
       AppKeys.urlHint: 'https://example.com',
       AppKeys.executablePath: '実行パス',
@@ -654,14 +572,10 @@ class AppStrings {
       AppKeys.save: '保存',
       AppKeys.modulesPageTitle: 'モジュールページ',
       AppKeys.selectModuleHint: '設定するモジュールを選択してください',
-      AppKeys.moduleMedia: 'メディア',
       AppKeys.moduleKnobs: 'ノブ',
       AppKeys.moduleSliders: 'スライダー',
       AppKeys.moduleTouch: 'タッチ',
-      AppKeys.moduleSwitch: 'スイッチ',
       AppKeys.moduleExtendedBtn: '拡張ボタン',
-      AppKeys.modulePiano: 'ピアノ',
-      AppKeys.moduleModeling: '3Dモデリング',
       AppKeys.serialPort: 'シリアルポート',
       AppKeys.selectPort: 'ポートを選択',
       AppKeys.noPortsFound: 'ポートが見つかりません',
@@ -678,30 +592,29 @@ class AppStrings {
       AppKeys.alertNotConfiguredText:
           'シリアルポートが設定されていません。デバイスに接続するポートを選択してください。',
       AppKeys.alertNotConfiguredButton: '設定を開く',
-      AppKeys.mediaPlayPause: '再生/一時停止',
-      AppKeys.mediaNext: '次のトラック',
-      AppKeys.mediaPrev: '前のトラック',
-      AppKeys.mediaVolUp: '音量アップ',
-      AppKeys.mediaVolDown: '音量ダウン',
       AppKeys.visitWebsite: 'ウェブサイトへ',
       AppKeys.visitMakerWorld: 'MakerWorldへ',
       AppKeys.socialNetworks: 'ソーシャルネットワーク',
       AppKeys.reportProblem: '問題を報告',
       AppKeys.reportSubject: 'Console Deck PRO 問題報告',
       AppKeys.reportBodyPrototype: '問題の説明: ',
-      AppKeys.uploadSuccess: 'Success! Your 3D file is ready.',
-      AppKeys.uploadAuthError: 'App authentication failed.',
-      AppKeys.uploadTooLarge: 'File is too large. Maximum 5MB.',
-      AppKeys.uploadInvalidSvg: 'Uploaded file is not a valid SVG.',
-      AppKeys.uploadTooManyRequests:
-          'Too many requests. Please wait and try again later!',
-      AppKeys.uploadComplexLogo: 'The logo is too complex for 3D rendering.',
-      AppKeys.uploadServerError: 'An unexpected server error occurred.',
-      AppKeys.fileNotFound: 'File not found',
-      AppKeys.fileSavedPrefix: 'File saved:',
-      AppKeys.errorPrefix: 'Error:',
-      AppKeys.openFolder: 'Open Folder',
+      AppKeys.browse: '参照',
+      AppKeys.generate: '生成',
+      AppKeys.uploadSuccess: '成功！3Dファイルが準備できました。',
+      AppKeys.uploadAuthError: 'アプリ認証に失敗しました。',
+      AppKeys.uploadTooLarge: 'ファイルが大きすぎます。最大5MBです。',
+      AppKeys.uploadInvalidSvg: 'アップロードされたファイルは有効なSVGではありません。',
+      AppKeys.uploadTooManyRequests: 'リクエストが多すぎます。後でもう一度お試しください！',
+      AppKeys.uploadComplexLogo: 'ロゴが3Dレンダリングには複雑すぎます。',
+      AppKeys.uploadServerError: '予期しないサーバーエラーが発生しました。',
+      AppKeys.uploadTimeout: '操作がタイムアウトしました。再試行してください。',
+      AppKeys.fileNotFound: 'ファイルが見つかりません',
+      AppKeys.fileSavedPrefix: 'ファイル保存済み：',
+      AppKeys.errorPrefix: 'エラー：',
+      AppKeys.openFolder: 'フォルダを開く',
       AppKeys.clear: 'クリア',
+      AppKeys.skinCreatorLockedTooltip:
+          'Skin Creator はロックされています。これはリモートで有効化できるストレッチゴール機能です。',
     },
   };
 
@@ -710,7 +623,6 @@ class AppStrings {
     if (localized != null && localized.containsKey(key)) {
       return localized[key]!;
     }
-    // Fallback to English when the selected locale misses a key.
     return _localizedValues['en']![key] ?? key;
   }
 }

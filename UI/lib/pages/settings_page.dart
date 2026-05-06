@@ -29,6 +29,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _haTokenVisible = false;
   bool _haTestLoading = false;
   bool? _haTestOk;
+  String? _haTestMessage;
 
   @override
   void initState() {
@@ -65,20 +66,80 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _testHaConnection() async {
-    setState(() { _haTestLoading = true; _haTestOk = null; });
+    final host = _haHostController.text.trim().replaceAll(RegExp(r'/+$'), '');
+    final token = _haTokenController.text.trim();
+
+    if (host.isEmpty || token.isEmpty) {
+      setState(() {
+        _haTestOk = false;
+        _haTestMessage = 'URL and token are required';
+      });
+      return;
+    }
+    if (!host.startsWith('http://') && !host.startsWith('https://')) {
+      setState(() {
+        _haTestOk = false;
+        _haTestMessage = 'URL must start with http:// or https://';
+      });
+      return;
+    }
+
+    setState(() {
+      _haTestLoading = true;
+      _haTestOk = null;
+      _haTestMessage = null;
+    });
+
     try {
-      final host = _haHostController.text.trim().replaceAll(RegExp(r'/+$'), '');
-      final token = _haTokenController.text.trim();
       final resp = await http.get(
         Uri.parse('$host/api/'),
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 5));
-      if (mounted) setState(() { _haTestOk = resp.statusCode == 200; });
-    } catch (_) {
-      if (mounted) setState(() { _haTestOk = false; });
+
+      if (!mounted) return;
+      if (resp.statusCode == 200) {
+        setState(() {
+          _haTestOk = true;
+          _haTestMessage = 'Connected successfully';
+        });
+      } else if (resp.statusCode == 401) {
+        setState(() {
+          _haTestOk = false;
+          _haTestMessage = 'Invalid or expired token (401)';
+        });
+      } else {
+        setState(() {
+          _haTestOk = false;
+          _haTestMessage = 'Unexpected response: HTTP ${resp.statusCode}';
+        });
+      }
+    } on TimeoutException {
+      if (mounted) {
+        setState(() {
+          _haTestOk = false;
+          _haTestMessage = 'Connection timed out – check the host address';
+        });
+      }
+    } on Exception catch (e) {
+      if (mounted) {
+        setState(() {
+          _haTestOk = false;
+          _haTestMessage = 'Cannot reach host – ${_simplifyNetworkError(e)}';
+        });
+      }
     } finally {
       if (mounted) setState(() { _haTestLoading = false; });
     }
+  }
+
+  String _simplifyNetworkError(Exception e) {
+    final msg = e.toString();
+    if (msg.contains('Connection refused')) return 'connection refused';
+    if (msg.contains('Failed host lookup') || msg.contains('getaddrinfo')) {
+      return 'hostname not found';
+    }
+    if (msg.contains('Network is unreachable')) return 'network unreachable';
+    return 'network error';
   }
 
   Future<void> _saveHaConfig() async {
@@ -373,18 +434,6 @@ class _SettingsPageState extends State<SettingsPage> {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
-                                    if (_haTestOk != null) ...[
-                                      Icon(
-                                        _haTestOk!
-                                            ? Icons.check_circle
-                                            : Icons.error,
-                                        color: _haTestOk!
-                                            ? Colors.green
-                                            : Colors.red,
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 8),
-                                    ],
                                     OutlinedButton(
                                       onPressed: _haTestLoading
                                           ? null
@@ -405,6 +454,34 @@ class _SettingsPageState extends State<SettingsPage> {
                                     ),
                                   ],
                                 ),
+                                if (_haTestMessage != null) ...[
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        _haTestOk == true
+                                            ? Icons.check_circle_outline
+                                            : Icons.error_outline,
+                                        size: 16,
+                                        color: _haTestOk == true
+                                            ? Colors.green
+                                            : Theme.of(context).colorScheme.error,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          _haTestMessage!,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: _haTestOk == true
+                                                ? Colors.green
+                                                : Theme.of(context).colorScheme.error,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ],
                             ),
                           ),
