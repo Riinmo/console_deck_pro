@@ -12,9 +12,10 @@ This is an **open-source maker project**. The full package (3D-printable enclosu
 |---|---|
 | `console_deck_pro_arduino/` | Arduino firmware (upload once to the board) |
 | `UI/` | Flutter desktop app (Windows / macOS / Linux) |
-| `console_deck_pro.py` | Python backend — bridges the Arduino with the OS |
+| `console_deck_pro.py` | Python backend source — bridges the Arduino with the OS |
+| `dist/console_deck_pro.exe` | Compiled backend executable (produced by CI via PyInstaller) |
 | `config.example.json` | Example configuration — copy to get started |
-| `requirements.txt` | Python dependencies |
+| `requirements.txt` | Python dependencies (for manual / dev use) |
 | `BUILDING.md` | How to build the installer from source |
 | `PLATFORMS.md` | Platform-specific notes (Windows / macOS / Linux) |
 
@@ -53,18 +54,16 @@ The OLED display should light up and show the boot screen. Done — you never ne
 2. Download `ConsoleDeckPro_Setup.exe`
 3. Run the installer and follow the wizard
 
-The installer includes everything: the UI app and the backend — no Python installation required.
+The installer includes everything: the UI app and the compiled backend — no Python installation required.
 
 ---
 
 ### Step 4 — First launch
 
-1. Open **Console Deck PRO** from the Start menu (or desktop shortcut)
-2. The backend starts automatically in the background — nothing extra to run
-3. Go to **Settings** and select the Arduino serial port (e.g. `COM3`)
-4. The OLED display will show the connected state and begin displaying PC stats
-
-> **Tip:** enable **Start with Windows** in Settings to have the app launch automatically at login.
+1. In the installation folder (default: `C:\Program Files\Console Deck PRO`), double-click **`console_deck_pro.exe`** to start the backend. You can also add it to Windows startup via **Task Scheduler** or by placing a shortcut in `shell:startup` so it runs automatically at login.
+2. Open **Console Deck PRO** from the Start menu (or desktop shortcut) to launch the UI.
+3. Go to **Settings** and select the Arduino serial port (e.g. `COM3`).
+4. The OLED display will show the connected state and begin displaying PC stats.
 
 ---
 

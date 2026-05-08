@@ -42,7 +42,7 @@ flutter build windows \
 
 ## 3 — Build the Windows installer
 
-1. Copy `dist\console_deck_pro.exe` to the project root (the `.iss` script expects it there)
+1. Make sure `dist\console_deck_pro.exe` exists (built in step 1 — the `.iss` script reads it from there)
 2. Open `UI\setup.iss` in Inno Setup Compiler
 3. Press **Compile** (Ctrl+F9)
 
@@ -54,9 +54,9 @@ Output: `UI\Output\ConsoleDeckPro_Setup.exe`
 
 ## Installer behavior
 
-- Installs the Flutter UI and the Python backend exe
-- Copies `console_deck_pro.py`, `module_extensions.py`, `requirements.txt`, and `config.example.json` for manual launch / reference
-- Does **not** auto-start the backend (manual launch only)
+- Installs the Flutter UI (`console_deck_ui.exe`) and the compiled backend (`console_deck_pro.exe`) to the app directory
+- Copies `config.example.json` for reference
+- Does **not** auto-start the backend — users must launch it manually or add it to Windows startup themselves (e.g. via Task Scheduler or `shell:startup`)
 - Cleans up legacy files from older installer versions on upgrade
 
 ---
