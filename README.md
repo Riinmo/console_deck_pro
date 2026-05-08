@@ -20,19 +20,6 @@ This is an **open-source maker project**. The full package (3D-printable enclosu
 
 ---
 
-## Hardware you need
-
-- Arduino Nano (ATmega328P)
-- SH1107 128×128 OLED display (I2C, Seeed variant)
-- 9 momentary push buttons
-- 1 rotary encoder with push button
-- USB cable (Nano → PC)
-- *(optional)* expansion module: 2× analog sliders, 2× knobs, or 6× extra buttons
-
-Refer to the campaign page for the full schematic, BOM, and 3D-printable files.
-
----
-
 ## Getting started (Windows)
 
 ### Step 1 — Download this repo
