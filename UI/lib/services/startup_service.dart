@@ -10,12 +10,14 @@ class StartupService {
   static Future<bool> isEnabled() async {
     if (!Platform.isWindows) return false;
     try {
-      final result = await Process.run(
+      // ProcessStartMode.detached uses DETACHED_PROCESS on Windows, so reg.exe
+      // runs without a console window (avoids a CMD flash from a GUI app).
+      final process = await Process.start(
         'reg',
         ['query', _regKey, '/v', _regValueName],
-        runInShell: true,
+        mode: ProcessStartMode.detached,
       );
-      return result.exitCode == 0;
+      return await process.exitCode == 0;
     } catch (e) {
       if (kDebugMode) print('[StartupService] isEnabled error: $e');
       return false;
@@ -28,19 +30,20 @@ class StartupService {
     try {
       if (enable) {
         final exePath = Platform.resolvedExecutable;
-        final result = await Process.run(
+        // Quote the path so Windows Run key handles spaces in the install dir.
+        final process = await Process.start(
           'reg',
-          ['add', _regKey, '/v', _regValueName, '/t', 'REG_SZ', '/d', exePath, '/f'],
-          runInShell: true,
+          ['add', _regKey, '/v', _regValueName, '/t', 'REG_SZ', '/d', '"$exePath"', '/f'],
+          mode: ProcessStartMode.detached,
         );
-        return result.exitCode == 0;
+        return await process.exitCode == 0;
       } else {
-        final result = await Process.run(
+        final process = await Process.start(
           'reg',
           ['delete', _regKey, '/v', _regValueName, '/f'],
-          runInShell: true,
+          mode: ProcessStartMode.detached,
         );
-        return result.exitCode == 0;
+        return await process.exitCode == 0;
       }
     } catch (e) {
       if (kDebugMode) print('[StartupService] setEnabled error: $e');
