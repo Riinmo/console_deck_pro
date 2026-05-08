@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:console_deck_ui/pages/skin_creator_page.dart';
 import 'package:flutter/material.dart';
 import 'l10n/app_translations.dart';
@@ -26,7 +25,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _statusTimer;
   bool _isCheckingBackend = false;
   bool _skinCreatorEnabled = false;
-  bool _backendLaunchAttempted = false;
   late final List<Widget> _persistentPages;
 
   @override
@@ -148,30 +146,12 @@ class _HomeScreenState extends State<HomeScreen> {
       _isCheckingBackend = false;
     }
 
-    if (newStatus == BackendStatus.backendDown) {
-      _ensureBackendRunning();
-    }
-
     if (mounted && newStatus != _status) {
       setState(() {
         _status = newStatus;
       });
     }
 
-  }
-
-  Future<void> _ensureBackendRunning() async {
-    if (_backendLaunchAttempted || !Platform.isWindows) return;
-    _backendLaunchAttempted = true;
-    final exeDir = File(Platform.resolvedExecutable).parent.path;
-    final backendExe = '$exeDir${Platform.pathSeparator}console_deck_pro.exe';
-    if (!File(backendExe).existsSync()) return;
-    try {
-      await Process.start(backendExe, [], mode: ProcessStartMode.detached);
-      debugPrint('[HomeScreen] Backend launched: $backendExe');
-    } catch (e) {
-      debugPrint('[HomeScreen] Failed to launch backend: $e');
-    }
   }
 
   @override
