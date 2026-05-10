@@ -97,29 +97,35 @@ Connect an expansion board to the side connector and select the module type from
 - **Sliders** — 2 analog sliders (typically volume + brightness)
 - **Knobs** — 2 rotary knobs
 - **Buttons** — 6 additional momentary buttons
-- **Media deck** — crossfader between two audio tracks
-- **Piano** — 12-key synth with custom sample support
 
 ---
 
-## Manual setup (macOS / Linux or advanced users)
+## Installing Python and dependencies (advanced / dev use)
 
-1. Install Python 3.10+
-2. Install dependencies:
-   ```bash
+If you want to run the backend from source instead of using the compiled `.exe`:
+
+### Step 1 — Install Python
+
+1. Go to [python.org/downloads](https://www.python.org/downloads/) and download the latest **Python 3.10+** installer for Windows
+2. Run the installer — **check "Add Python to PATH"** before clicking Install
+3. Verify the installation by opening a terminal and running:
+   ```
+   python --version
+   ```
+
+### Step 2 — Install dependencies
+
+1. Open a terminal in the project folder (where `requirements.txt` is located)
+2. Run:
+   ```
    pip install -r requirements.txt
    ```
-3. Start the backend:
-   ```bash
-   python console_deck_pro.py
-   ```
-4. Build or run the Flutter UI:
-   ```bash
-   cd UI
-   flutter run -d windows   # or macos / linux
-   ```
 
-See [PLATFORMS.md](PLATFORMS.md) for platform-specific notes.
+### Step 3 — Start the backend
+
+```
+python console_deck_pro.py
+```
 
 ---
 
