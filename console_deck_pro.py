@@ -149,7 +149,7 @@ def _press_system_volume_key(key: str, count: int = 1):
 # GPU Utils (Optional)
 try:
     import GPUtil
-    HAS_GPUTIL = True
+    HAS_GPUTIL = False
 except ImportError:
     HAS_GPUTIL = False
 
