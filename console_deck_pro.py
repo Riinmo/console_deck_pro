@@ -7,6 +7,7 @@ import subprocess
 import pyautogui
 import screen_brightness_control as sbc
 import os
+import sys
 import threading
 import platform
 from pathlib import Path
@@ -18,6 +19,55 @@ from threading import Thread, Event
 import uvicorn
 from serial.tools import list_ports
 import requests as _requests
+
+_stdio_log_handle = None
+_single_instance_mutex_handle = None
+
+def _ensure_stdio_for_pythonw():
+    """
+    pythonw.exe can start without stdout/stderr. Redirect them to a log file so
+    prints and Uvicorn logging cannot break the backend server thread.
+    """
+    global _stdio_log_handle
+
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+
+    try:
+        base_dir = os.getenv("APPDATA") or os.getenv("LOCALAPPDATA") or str(Path.home())
+        log_dir = Path(base_dir) / "ConsoleDeckPro"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        _stdio_log_handle = open(log_dir / "backend.log", "a", encoding="utf-8", buffering=1)
+        if sys.stdout is None:
+            sys.stdout = _stdio_log_handle
+        if sys.stderr is None:
+            sys.stderr = _stdio_log_handle
+    except Exception:
+        pass
+
+def _acquire_single_instance_lock():
+    """
+    Prevent multiple backend instances from fighting over COM ports and port 8000.
+    On Windows the named mutex is released automatically when this process exits.
+    """
+    global _single_instance_mutex_handle
+
+    if platform.system() != "Windows":
+        return True
+
+    ERROR_ALREADY_EXISTS = 183
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    handle = kernel32.CreateMutexW(None, False, "Local\\ConsoleDeckProBackend")
+    if not handle:
+        print("[WARNING] Could not create single-instance lock; continuing anyway.")
+        return True
+
+    _single_instance_mutex_handle = handle
+    if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
+        print("[INFO] Console Deck backend is already running. Exiting duplicate instance.")
+        return False
+
+    return True
 
 try:
     import pygame
@@ -149,7 +199,7 @@ def _press_system_volume_key(key: str, count: int = 1):
 # GPU Utils (Optional)
 try:
     import GPUtil
-    HAS_GPUTIL = True
+    HAS_GPUTIL = False
 except ImportError:
     HAS_GPUTIL = False
 
@@ -464,6 +514,7 @@ def _get_gpu_stats():
             text=True,
             timeout=1.0,
             check=False,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         out = (proc.stdout or "").strip()
         if out:
@@ -940,6 +991,11 @@ def get_cpu_freq_mhz():
     return -1
 
 if __name__ == "__main__":
+    _ensure_stdio_for_pythonw()
+
+    if not _acquire_single_instance_lock():
+        sys.exit(0)
+
     try:
         main()
     except KeyboardInterrupt:
